@@ -1,0 +1,137 @@
+---
+title: Repository management
+description: Create, manage, and access your Git repositories on Gitflare
+---
+
+Gitflare provides a complete repository management system that allows you to create, configure, and access your Git repositories through both the web interface and Git clients.
+
+## Creating repositories
+
+You can create a new repository from the dashboard by navigating to `/new`. The creation form includes:
+
+<CardGroup cols={2}>
+  <Card title="Repository name" icon="tag">
+    Enter a unique name using letters, numbers, hyphens, and underscores. The name cannot end with `.git` and must be less than 100 characters.
+  </Card>
+  <Card title="Description" icon="align-left">
+    Add an optional description up to 500 characters to help others understand your project.
+  </Card>
+  <Card title="Visibility" icon="eye">
+    Choose between public (anyone can see) or private (only you can access) repository visibility.
+  </Card>
+  <Card title="Automatic initialization" icon="rocket">
+    New repositories are automatically initialized with Git when created.
+  </Card>
+</CardGroup>
+
+When you submit the form, Gitflare creates both the database record and initializes the underlying Git repository using Cloudflare Durable Objects.
+
+## Repository structure
+
+Each repository in Gitflare includes:
+
+- **Owner information**: Linked to your user account via `ownerId` and username
+- **Visibility settings**: Public or private access control
+- **Description**: Optional project description
+- **Timestamps**: Creation and last update tracking
+- **Git storage**: Backed by SQLite in Cloudflare Durable Objects
+
+## Browsing repository contents
+
+The repository overview page at `/$owner/$repo` displays:
+
+### File and directory tree
+
+View your repository's file structure with:
+- Folder icons for directories (displayed first)
+- File icons for individual files
+- Last commit message for each entry
+- Relative timestamps showing when each item was last modified
+
+Click any directory to navigate deeper, or click a file to view its contents.
+
+### Branch selection
+
+Switch between branches using the branch selector component. The selected branch is tracked via the `ref` URL parameter, allowing you to:
+- View different branches of your repository
+- Share links to specific branches
+- Navigate the tree at any branch or commit reference
+
+### README rendering
+
+If your repository contains a README file (case-insensitive matching for `readme.md`, `readme.mdx`, `readme.markdown`, or `readme.txt`), Gitflare automatically:
+- Detects the README in the root directory
+- Renders Markdown files with GitHub Flavored Markdown support
+- Displays the content below the file tree
+- Supports raw HTML in Markdown files
+
+## Cloning repositories
+
+The "Code" button on the repository page provides the HTTPS clone URL:
+
+```bash
+git clone https://your-instance.com/owner/repo.git
+```
+
+You can copy the URL directly to your clipboard with one click.
+
+### Authentication for Git operations
+
+Gitflare implements different authentication rules based on the operation:
+
+**Pull operations (git clone, git pull, git fetch)**
+- Public repositories: No authentication required
+- Private repositories: Requires a Personal Access Token
+
+**Push operations (git push)**
+- Always requires authentication with a Personal Access Token
+- Only the repository owner can push changes
+
+See the [Authentication](/features/authentication) page for details on creating Personal Access Tokens.
+
+## Empty repository setup
+
+When you create a new repository, Gitflare shows setup instructions for:
+
+**Creating a new repository locally:**
+```bash
+echo "# my-repo" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://your-instance.com/owner/repo.git
+git push -u origin main
+```
+
+**Pushing an existing repository:**
+```bash
+git remote add origin https://your-instance.com/owner/repo.git
+git branch -M main
+git push -u origin main
+```
+
+## Updating repository settings
+
+Repository owners can update:
+- **Description**: Change the project description
+- **Visibility**: Toggle between public and private
+
+The repository name and owner cannot be changed after creation.
+
+## Repository commits
+
+View the commit history at `/$owner/$repo/commits` to see:
+- Complete commit timeline
+- Commit messages and authors
+- Commit SHAs and timestamps
+
+Click individual commits at `/$owner/$repo/commits/$commitId` to view the changes in that commit.
+
+## Technical implementation
+
+Gitflare stores repositories using:
+- **Database**: SQLite tables via Drizzle ORM for metadata
+- **Git storage**: Cloudflare Durable Objects with SQLite backend
+- **Indexes**: Optimized queries on owner, repository name, and ID fields
+- **Cascading deletes**: Removing a user automatically deletes their repositories

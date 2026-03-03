@@ -1,0 +1,250 @@
+---
+title: Contributing
+description: Guidelines for contributing to Gitflare development
+---
+
+## Getting started
+
+Before contributing, make sure you have:
+
+1. Completed the [development environment setup](/development/setup)
+2. Familiarized yourself with the [project structure](/development/project-structure)
+3. Read through these contribution guidelines
+
+## Development workflow
+
+<Steps>
+  <Step title="Fork and clone">
+    Fork the repository on GitHub and clone your fork:
+
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/gitflare.git
+    cd gitflare
+    ```
+  </Step>
+
+  <Step title="Create a feature branch">
+    Create a new branch for your feature or bug fix:
+
+    ```bash
+    git checkout -b feature/my-feature
+    ```
+
+    Use descriptive branch names:
+    - `feature/add-pull-requests` for new features
+    - `fix/authentication-bug` for bug fixes
+    - `docs/update-setup-guide` for documentation
+  </Step>
+
+  <Step title="Make your changes">
+    Implement your changes following the code style guidelines below.
+  </Step>
+
+  <Step title="Run the linter">
+    After making code changes, always run the linter with auto-fix:
+
+    ```bash
+    pnpm check:fix
+    ```
+
+    This ensures code quality and adherence to the project's style guidelines.
+  </Step>
+
+  <Step title="Test your changes">
+    Test your changes thoroughly:
+
+    ```bash
+    # Run type checking
+    pnpm typecheck
+
+    # Run tests (when available)
+    pnpm test
+
+    # Test manually in the browser
+    pnpm dev
+    ```
+  </Step>
+
+  <Step title="Commit your changes">
+    Commit your changes with a descriptive message:
+
+    ```bash
+    git add .
+    git commit -m "Add my feature"
+    ```
+
+    Write clear, concise commit messages that describe what changed and why.
+  </Step>
+
+  <Step title="Push and create a pull request">
+    Push your branch to your fork:
+
+    ```bash
+    git push origin feature/my-feature
+    ```
+
+    Then create a pull request on GitHub with a clear description of your changes.
+  </Step>
+</Steps>
+
+## Code style guidelines
+
+Gitflare uses Biome for linting and formatting via the Ultracite preset. Follow these guidelines:
+
+### TypeScript
+
+- **Use strict mode**: Enable strict TypeScript checking
+- **Explicit types**: Provide explicit types for function parameters and return values
+- **Prefer `unknown` over `any`**: Use `unknown` when the type is truly unknown
+- **Use const assertions**: Apply `as const` for literal types
+
+```typescript
+// Good
+function getUserById(id: string): User | null {
+  return users.find((user) => user.id === id) ?? null;
+}
+
+// Avoid
+function getUserById(id) {
+  return users.find((user) => user.id === id);
+}
+```
+
+### JavaScript/TypeScript conventions
+
+- **Quotes**: Use double quotes for strings
+- **Variables**: Use `const` by default, `let` only when reassignment is needed
+- **Functions**: Prefer arrow functions for callbacks and non-method functions
+- **Optional chaining**: Use `?.` for safe property access
+- **Nullish coalescing**: Use `??` instead of `||` for default values
+- **Destructuring**: Use object and array destructuring where appropriate
+- **No magic numbers**: Extract numeric constants with descriptive names
+
+```typescript
+// Good
+const MAX_RETRIES = 3;
+const result = response?.data ?? defaultValue;
+
+// Avoid
+if (retries > 3) return;
+const result = response && response.data || defaultValue;
+```
+
+### React conventions
+
+- **Function components**: Always use function components, not class components
+- **Hooks**: Place hooks at the top level with correct dependencies
+- **Semantic HTML**: Use semantic HTML elements with ARIA attributes
+- **Accessibility**: Ensure components are accessible
+
+```tsx
+// Good
+export function UserProfile({ userId }: { userId: string }) {
+  const user = useUser(userId);
+  
+  return (
+    <article>
+      <h2>{user.name}</h2>
+      <p>{user.bio}</p>
+    </article>
+  );
+}
+```
+
+### Imports
+
+- **Prefer specific imports**: Import only what you need
+- **Avoid barrel files**: Don't use index.ts re-exports (barrel files)
+
+```typescript
+// Good
+import { useState } from "react";
+import { Button } from "~/components/ui/button";
+
+// Avoid
+import * as React from "react";
+import { Button } from "~/components/ui";
+```
+
+### Error handling
+
+- **Throw Error objects**: Always throw `Error` objects with descriptive messages
+- **Early returns**: Prefer early returns over nested conditionals
+- **Remove debug code**: Remove `console.log` and `debugger` statements from production code
+
+```typescript
+// Good
+if (!user) {
+  throw new Error("User not found");
+}
+
+return user.email;
+
+// Avoid
+if (user) {
+  return user.email;
+} else {
+  throw "User not found";
+}
+```
+
+## Available commands
+
+### Root level
+
+- `pnpm dev` - Start all applications in development mode (Turborepo)
+- `pnpm build` - Build all applications
+- `pnpm test` - Run tests across all workspaces
+- `pnpm typecheck` - Run TypeScript type checking
+- `pnpm check` - Check for linting and formatting issues
+- `pnpm check:fix` - Check and auto-fix linting and formatting issues
+
+### Web app (apps/web)
+
+- `pnpm dev` - Start the web development server (Alchemy)
+- `pnpm build` - Build the web application for production
+- `pnpm serve` - Preview production build locally
+- `pnpm deploy` - Deploy to Cloudflare Workers
+- `pnpm typecheck` - Run TypeScript type checking
+- `pnpm cf-typegen` - Generate TypeScript types for Cloudflare Workers
+- `pnpm db:generate` - Generate Drizzle migrations from schema changes
+- `pnpm db:migrate:local` - Apply migrations to local D1 database
+- `pnpm db:migrate:remote` - Apply migrations to production D1 database
+
+## Important notes
+
+- **Always run the linter**: Run `pnpm check:fix` after making code changes to ensure code quality
+- **Fetch latest docs**: When working with external libraries, always fetch the latest documentation:
+  - For shadcn/ui components, refer to https://ui.shadcn.com/
+  - For other libraries, consult their official documentation
+- **No test suite yet**: Gitflare currently does not have a comprehensive test suite configured
+- **Use pnpm**: This project uses pnpm as the package manager, not npm or yarn
+
+## Pull request guidelines
+
+- Provide a clear description of the changes and their purpose
+- Reference any related issues using GitHub keywords (e.g., "Fixes #123")
+- Ensure all checks pass (linting, type checking)
+- Keep pull requests focused on a single feature or fix
+- Respond to review feedback promptly
+
+## Documentation
+
+When adding new features:
+
+- Update relevant documentation pages
+- Add code comments for complex logic
+- Update the README if user-facing functionality changes
+- Document any new environment variables or configuration options
+
+## Getting help
+
+If you need assistance:
+
+- Open an issue on GitHub for bugs or feature requests
+- Check the [TanStack documentation](https://tanstack.com/) for framework-specific questions
+- Refer to the [Cloudflare documentation](https://developers.cloudflare.com/) for Workers and Durable Objects
+
+## License
+
+By contributing to Gitflare, you agree that your contributions will be licensed under the MIT License.

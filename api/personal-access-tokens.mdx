@@ -1,0 +1,407 @@
+---
+title: Personal access tokens
+description: Generate and manage personal access tokens for Git operations and API authentication
+---
+
+Personal access tokens (PATs) function like passwords for authenticating with Gitflare's Git operations over HTTP. Use them to push, pull, and clone repositories without exposing your password.
+
+## Overview
+
+Personal access tokens are prefixed with `gvx_` and provide a secure way to authenticate Git operations. Unlike password authentication, tokens can be easily revoked without changing your account password.
+
+### Use cases
+
+- Push and pull Git repositories over HTTPS
+- Clone private repositories
+- Authenticate automated workflows and CI/CD pipelines
+- Provide temporary access without sharing credentials
+
+## Token format
+
+Tokens follow this format:
+
+```
+gvx_[random-string]
+```
+
+Example: `gvx_abc123def456xyz789`
+
+<Warning>
+  Save your token immediately after creation. You won't be able to view it again.
+</Warning>
+
+## Create token
+
+Generate a new personal access token.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/api-key/create \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "My Development Token",
+    "prefix": "gvx_"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/api-key/create', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    name: 'My Development Token',
+    prefix: 'gvx_',
+  }),
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Descriptive name for the token to help you identify it later. Must be between 3 and 50 characters.
+</ParamField>
+
+<ParamField body="prefix" type="string" default="gvx_">
+  Token prefix. Defaults to `gvx_` for Gitflare tokens.
+</ParamField>
+
+<ParamField body="expiresAt" type="timestamp">
+  Optional expiration timestamp in milliseconds. If not provided, the token never expires.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique token identifier.
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  The full token string. This is the only time you'll see the complete token.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The descriptive name you provided.
+</ResponseField>
+
+<ResponseField name="start" type="string">
+  First few characters of the token (e.g., `gvx_abc`) for identification.
+</ResponseField>
+
+<ResponseField name="prefix" type="string">
+  Token prefix.
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean">
+  Whether the token is active.
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp">
+  Token creation timestamp in milliseconds.
+</ResponseField>
+
+<ResponseField name="expiresAt" type="timestamp | null">
+  Token expiration timestamp, or `null` if it never expires.
+</ResponseField>
+
+### Example response
+
+```json
+{
+  "id": "token_abc123",
+  "key": "gvx_abc123def456xyz789",
+  "name": "My Development Token",
+  "start": "gvx_abc",
+  "prefix": "gvx_",
+  "enabled": true,
+  "createdAt": 1709500000000,
+  "expiresAt": null
+}
+```
+
+## List tokens
+
+Retrieve all personal access tokens for the authenticated user.
+
+<CodeGroup>
+```bash cURL
+curl https://your-gitflare-instance.com/api/auth/api-key/list \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/api-key/list', {
+  credentials: 'include',
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+Returns an array of token objects. Note that the full token `key` is not included for security reasons.
+
+<ResponseField name="tokens" type="array">
+  Array of token objects.
+  
+  <Expandable title="token properties">
+    <ResponseField name="id" type="string">
+      Unique token identifier.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Descriptive token name.
+    </ResponseField>
+    
+    <ResponseField name="start" type="string">
+      First few characters of the token (e.g., `gvx_abc`).
+    </ResponseField>
+    
+    <ResponseField name="prefix" type="string">
+      Token prefix.
+    </ResponseField>
+    
+    <ResponseField name="enabled" type="boolean">
+      Whether the token is active.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="timestamp">
+      Token creation timestamp.
+    </ResponseField>
+    
+    <ResponseField name="lastRequest" type="timestamp | null">
+      Last time this token was used, or `null` if never used.
+    </ResponseField>
+    
+    <ResponseField name="expiresAt" type="timestamp | null">
+      Token expiration timestamp, or `null` if it never expires.
+    </ResponseField>
+    
+    <ResponseField name="requestCount" type="number">
+      Total number of requests made with this token.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example response
+
+```json
+[
+  {
+    "id": "token_abc123",
+    "name": "My Development Token",
+    "start": "gvx_abc",
+    "prefix": "gvx_",
+    "enabled": true,
+    "createdAt": 1709500000000,
+    "lastRequest": 1709586400000,
+    "expiresAt": null,
+    "requestCount": 42
+  },
+  {
+    "id": "token_def456",
+    "name": "CI/CD Pipeline",
+    "start": "gvx_def",
+    "prefix": "gvx_",
+    "enabled": true,
+    "createdAt": 1709400000000,
+    "lastRequest": null,
+    "expiresAt": null,
+    "requestCount": 0
+  }
+]
+```
+
+## Delete token
+
+Revoke a personal access token. This immediately invalidates the token.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/api-key/delete \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -d '{
+    "keyId": "token_abc123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/api-key/delete', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    keyId: 'token_abc123',
+  }),
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Request body
+
+<ParamField body="keyId" type="string" required>
+  The ID of the token to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the token was successfully deleted.
+</ResponseField>
+
+### Example response
+
+```json
+{
+  "success": true
+}
+```
+
+## Using tokens with Git
+
+Once you have a personal access token, use it as your password when performing Git operations over HTTPS.
+
+### Clone a repository
+
+```bash
+git clone https://username:gvx_abc123def456@your-gitflare-instance.com/owner/repo.git
+```
+
+### Configure credentials
+
+For repeated operations, configure Git to cache your credentials:
+
+```bash
+# Cache credentials for 1 hour
+git config --global credential.helper 'cache --timeout=3600'
+
+# Or store credentials permanently (use with caution)
+git config --global credential.helper store
+```
+
+Then perform a Git operation. When prompted:
+
+```bash
+Username: your-username
+Password: gvx_abc123def456
+```
+
+### In CI/CD pipelines
+
+Use tokens in automated workflows:
+
+```yaml
+# GitHub Actions example
+- name: Clone repository
+  run: |
+    git clone https://${{ secrets.GITFLARE_USERNAME }}:${{ secrets.GITFLARE_TOKEN }}@your-gitflare-instance.com/owner/repo.git
+```
+
+## Token security
+
+### Best practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive names">
+    Name tokens based on their purpose (e.g., "CI/CD Pipeline", "Local Development") to track usage.
+  </Accordion>
+  
+  <Accordion title="Set expiration dates">
+    For temporary access, set an expiration date when creating the token.
+  </Accordion>
+  
+  <Accordion title="Revoke unused tokens">
+    Regularly review and delete tokens you no longer need.
+  </Accordion>
+  
+  <Accordion title="Use environment variables">
+    Store tokens in environment variables or secret management systems, never in code.
+  </Accordion>
+  
+  <Accordion title="Rotate tokens regularly">
+    Create new tokens and revoke old ones periodically, especially for long-running services.
+  </Accordion>
+  
+  <Accordion title="Limit token scope">
+    Create separate tokens for different purposes instead of sharing a single token.
+  </Accordion>
+</AccordionGroup>
+
+### What to do if a token is compromised
+
+1. **Immediately revoke** the compromised token via the [delete endpoint](#delete-token)
+2. **Generate a new token** with a different name
+3. **Update** all services using the old token
+4. **Review** recent activity to identify any unauthorized access
+
+## Token metadata
+
+Gitflare tracks usage information for each token:
+
+- **Last request**: Timestamp of the most recent API call
+- **Request count**: Total number of requests made
+- **Created date**: When the token was generated
+
+Use this information to:
+
+- Identify unused tokens for deletion
+- Monitor token usage patterns
+- Detect unusual activity
+
+## Rate limiting
+
+Personal access tokens are subject to rate limiting. Rate limiting is currently disabled in Gitflare but can be enabled in the configuration:
+
+```typescript
+apiKey({
+  rateLimit: {
+    enabled: true,
+    max: 100,        // Maximum requests
+    window: 3600000, // Time window in ms (1 hour)
+  },
+})
+```
+
+When rate limiting is enabled:
+
+- Each token has its own rate limit
+- Limits reset after the specified time window
+- Exceeding limits returns a `429 Too Many Requests` error
+
+## Error responses
+
+<ResponseField name="error" type="object">
+  Error information when a request fails.
+  
+  <Expandable title="error properties">
+    <ResponseField name="message" type="string">
+      Human-readable error message.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Common error codes
+
+- `400 Bad Request`: Invalid parameters (e.g., name too short)
+- `401 Unauthorized`: No active session or invalid session
+- `404 Not Found`: Token ID not found
+- `429 Too Many Requests`: Rate limit exceeded (when enabled)
+- `500 Internal Server Error`: Server-side error
+
+## See also
+
+- [Authentication](/api/authentication) - User authentication and session management
+- [Git Operations](/guides/git-operations) - Using Git with Gitflare
+- [Access Control](/guides/access-control) - Repository permissions and access management

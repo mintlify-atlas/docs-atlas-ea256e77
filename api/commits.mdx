@@ -1,0 +1,239 @@
+---
+title: Commits
+description: Retrieve commit history and detailed commit information
+---
+
+## Get commits
+
+Retrieve a list of commits from a repository.
+
+```http
+GET /api/commits
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  The repository name
+</ParamField>
+
+<ParamField path="ref" type="string">
+  The branch, tag, or commit reference to retrieve commits from. Defaults to the default branch if not specified
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum number of commits to return (depth). If not specified, returns all commits
+</ParamField>
+
+### Response
+
+Returns an array of commit objects.
+
+<ResponseField name="oid" type="string">
+  The commit object ID (SHA-1 hash)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  The commit message
+</ResponseField>
+
+<ResponseField name="author" type="object">
+  Information about the commit author
+  
+  <ResponseField name="name" type="string">
+    Author's name
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    Author's email address
+  </ResponseField>
+  
+  <ResponseField name="timestamp" type="number">
+    Unix timestamp when the commit was authored
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="committer" type="object">
+  Information about the committer
+  
+  <ResponseField name="name" type="string">
+    Committer's name
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    Committer's email address
+  </ResponseField>
+  
+  <ResponseField name="timestamp" type="number">
+    Unix timestamp when the commit was committed
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="parent" type="string[]">
+  Array of parent commit OIDs
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/commits?owner=johndoe&repo=my-project&ref=main&limit=10"
+```
+
+### Example response
+
+```json
+[
+  {
+    "oid": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+    "message": "Add user authentication feature",
+    "author": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709568000
+    },
+    "committer": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709568000
+    },
+    "parent": ["b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1"]
+  },
+  {
+    "oid": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1",
+    "message": "Initial commit",
+    "author": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709481600
+    },
+    "committer": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709481600
+    },
+    "parent": []
+  }
+]
+```
+
+---
+
+## Get commit details
+
+Retrieve detailed information about a specific commit, including the files changed.
+
+```http
+GET /api/commit
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  The repository name
+</ParamField>
+
+<ParamField path="commitOid" type="string" required>
+  The commit object ID (SHA-1 hash) to retrieve details for
+</ParamField>
+
+### Response
+
+Returns an object containing commit details and file changes.
+
+<ResponseField name="commit" type="object">
+  The commit object
+  
+  <ResponseField name="oid" type="string">
+    The commit object ID (SHA-1 hash)
+  </ResponseField>
+  
+  <ResponseField name="message" type="string">
+    The commit message
+  </ResponseField>
+  
+  <ResponseField name="author" type="object">
+    Information about the commit author
+  </ResponseField>
+  
+  <ResponseField name="committer" type="object">
+    Information about the committer
+  </ResponseField>
+  
+  <ResponseField name="parent" type="string[]">
+    Array of parent commit OIDs
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="changes" type="array">
+  Array of file changes in the commit
+  
+  <ResponseField name="path" type="string">
+    File path relative to repository root
+  </ResponseField>
+  
+  <ResponseField name="type" type="string">
+    Type of change: `add`, `modify`, or `delete`
+  </ResponseField>
+  
+  <ResponseField name="oldOid" type="string">
+    Previous blob OID (for modifications and deletions)
+  </ResponseField>
+  
+  <ResponseField name="newOid" type="string">
+    New blob OID (for additions and modifications)
+  </ResponseField>
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/commit?owner=johndoe&repo=my-project&commitOid=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+```
+
+### Example response
+
+```json
+{
+  "commit": {
+    "oid": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+    "message": "Add user authentication feature",
+    "author": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709568000
+    },
+    "committer": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "timestamp": 1709568000
+    },
+    "parent": ["b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1"]
+  },
+  "changes": [
+    {
+      "path": "src/auth/login.ts",
+      "type": "add",
+      "newOid": "c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2"
+    },
+    {
+      "path": "src/utils/helpers.ts",
+      "type": "modify",
+      "oldOid": "d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3",
+      "newOid": "e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4"
+    },
+    {
+      "path": "src/old-auth.ts",
+      "type": "delete",
+      "oldOid": "f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5"
+    }
+  ]
+}
+```

@@ -1,0 +1,136 @@
+---
+title: Introduction
+description: A serverless Git hosting platform built on Cloudflare's edge network
+---
+
+<img
+  className="block"
+  src="/images/hero-light.svg"
+  alt="Gitflare Hero"
+/>
+
+## Welcome to Gitflare
+
+Gitflare is a self-hosted GitHub alternative designed to run entirely on the Cloudflare Developer Platform. With no VMs or containers required, Gitflare leverages Cloudflare Workers and Durable Objects to provide a fully serverless Git hosting experience at the edge.
+
+<Note>
+  Gitflare is currently in early development. Expect bugs and missing features as we continue to build and improve the platform.
+</Note>
+
+## Key features
+
+Gitflare brings modern Git hosting capabilities to the serverless edge:
+
+<CardGroup cols={2}>
+  <Card title="Serverless architecture" icon="cloud">
+    No VMs or containers needed. Built entirely on Cloudflare Workers and Durable Objects for automatic scaling and zero maintenance.
+  </Card>
+  
+  <Card title="Global edge network" icon="globe">
+    Deployed on Cloudflare's global network for low latency access from anywhere in the world.
+  </Card>
+  
+  <Card title="Unlimited repositories" icon="folder-tree">
+    Create unlimited public and private repositories with full Git protocol support.
+  </Card>
+  
+  <Card title="Issues & pull requests" icon="code-pull-request">
+    Track bugs and feature requests with built-in issue management. Pull requests coming soon!
+  </Card>
+  
+  <Card title="Web interface" icon="browser">
+    Manage repositories, browse code, view commits, and handle issues through an intuitive web UI.
+  </Card>
+  
+  <Card title="Open source" icon="code-branch">
+    Completely open-source under the MIT License. Self-host on your own Cloudflare account.
+  </Card>
+</CardGroup>
+
+## How it works
+
+Gitflare reimagines Git hosting with a fully serverless architecture:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Git Client (You)                           │
+│                     git push / git pull / git clone                 │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │ HTTPS
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Cloudflare Workers (Edge)                      │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │              TanStack Start Application                       │  │
+│  │                                                               │  │
+│  │  • Authentication & Authorization                             │  │
+│  │  • Git Smart HTTP Protocol Handlers                           │  │
+│  │  • Web UI                                                     │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└──────────────────┬────────────────────────────┬─────────────────────┘
+                   │                            │
+                   ▼                            ▼
+┌──────────────────────────────────┐  ┌─────────────────────────────┐
+│   Cloudflare Durable Objects     │  │       Cloudflare D1         │
+│                                  │  │                             │
+│  • Git objects storage           │  │  • User accounts            │
+│  • Packfile operations           │  │  • Repository metadata      │
+│  • Virtualized file system       │  │  • Issues & comments        │
+│  (One per repository)            │  │                             │
+└──────────────────────────────────┘  └─────────────────────────────┘
+```
+
+<Steps>
+  <Step title="Git protocol handling">
+    When you run standard Git commands, requests are handled by the TanStack Start application running on Cloudflare Workers. The application implements the Git Smart HTTP protocol (`git-upload-pack` for fetch/pull and `git-receive-pack` for push).
+  </Step>
+  
+  <Step title="Repository data storage">
+    Each repository gets its own isolated Durable Object instance with a virtualized file system built on Durable Object SQLite storage. All Git objects (blobs, trees, commits, tags) and references (branches, tags) are stored here.
+  </Step>
+  
+  <Step title="Metadata & coordination">
+    User accounts, repository metadata, issues, and access control information are stored in Cloudflare D1, providing fast queries and real-time updates for the web interface.
+  </Step>
+</Steps>
+
+## Tech stack
+
+Gitflare is built with modern web technologies optimized for edge computing:
+
+- **[TanStack Start](https://tanstack.com/start/latest)** - Full-stack React framework for the web interface
+- **[Cloudflare Workers](https://developers.cloudflare.com/workers/)** - Serverless execution environment for Git protocol handlers
+- **[Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)** - Strongly consistent storage for Git repository data
+- **[Cloudflare D1](https://developers.cloudflare.com/d1/)** - SQLite database for user data and metadata
+- **[Better Auth](https://www.better-auth.com/)** - Authentication and authorization
+- **[isomorphic-git](https://isomorphic-git.org/)** - Pure JavaScript Git implementation
+
+## Get started
+
+Ready to deploy your own Gitflare instance?
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up your first Gitflare instance in minutes
+  </Card>
+  
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Learn how Gitflare works under the hood
+  </Card>
+  
+  <Card title="Git operations" icon="git-alt" href="/guides/git-operations">
+    Push, pull, and clone repositories
+  </Card>
+</CardGroup>
+
+## Community and support
+
+<CardGroup cols={2}>
+  <Card title="GitHub repository" icon="github" href="https://github.com/mdhruvil/gitflare">
+    Star us on GitHub and contribute to the project
+  </Card>
+  
+  <Card title="Report issues" icon="bug" href="https://github.com/mdhruvil/gitflare/issues">
+    Found a bug? Let us know on GitHub Issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,233 @@
+---
+title: Authentication system
+description: Secure user authentication powered by Better Auth with email/password and Personal Access Tokens
+---
+
+Gitflare uses [Better Auth](https://www.better-auth.com/) as its authentication framework, providing secure user management, session handling, and API key-based authentication for Git operations.
+
+## User authentication
+
+### Email and password sign-in
+
+Gitflare implements email and password authentication with the following features:
+
+<CardGroup cols={2}>
+  <Card title="Email validation" icon="envelope">
+    Validates email format before accepting sign-in attempts
+  </Card>
+  <Card title="Password requirements" icon="lock">
+    Minimum 8 characters required for all passwords
+  </Card>
+  <Card title="Session management" icon="clock">
+    Automatic session creation with secure cookies
+  </Card>
+  <Card title="No email verification" icon="bolt">
+    Currently configured without email verification for faster onboarding
+  </Card>
+</CardGroup>
+
+Access the login page at `/login` to sign in with your credentials.
+
+### Sign-up flow
+
+New users can create accounts at `/signup` by providing:
+- Email address (must be unique)
+- Password (minimum 8 characters)
+- Display name
+- Username (unique identifier for repository ownership)
+
+### Session handling
+
+Better Auth manages sessions with:
+- **Secure cookies**: Uses secure cookie flags in production
+- **Session tokens**: Unique tokens for each session
+- **Expiration tracking**: Automatic session expiry with `expiresAt` timestamp
+- **Device information**: Captures IP address and user agent for security
+- **User association**: Links sessions to user accounts with cascade deletion
+
+## User accounts
+
+Each user account in Gitflare includes:
+
+```typescript
+interface User {
+  id: string                  // Unique user identifier
+  name: string                // Display name
+  email: string               // Unique email address
+  emailVerified: boolean      // Verification status (default: false)
+  image: string | null        // Optional profile image
+  username: string            // Unique username for repositories
+  displayUsername: string     // Optional display variant
+  createdAt: Date            // Account creation timestamp
+  updatedAt: Date            // Last profile update
+}
+```
+
+### Username system
+
+Gitflare includes Better Auth's username plugin, which:
+- Ensures usernames are unique across the platform
+- Links repositories to user accounts via username
+- Prevents username changes after account creation
+- Uses usernames in repository URLs (`/$username/$repo`)
+
+## Personal Access Tokens (PATs)
+
+Personal Access Tokens serve as passwords for Git operations over HTTPS. They're implemented using Better Auth's API key plugin.
+
+### Creating a PAT
+
+Navigate to **Settings > Personal Access Tokens** to create a new token:
+
+1. Click "Generate New Token"
+2. Enter a descriptive name (3-50 characters)
+3. Click "Generate Token"
+4. Copy the token immediately - you won't see it again
+
+All tokens are prefixed with `gvx_` for easy identification.
+
+### Token structure
+
+```typescript
+interface ApiKey {
+  id: string                  // Unique token ID
+  name: string | null         // Descriptive token name
+  start: string               // Token prefix for display (e.g., "gvx_abc")
+  prefix: string              // Full prefix
+  key: string                 // Hashed token value
+  userId: string              // Owner's user ID
+  enabled: boolean            // Whether token is active
+  createdAt: Date            // Token creation time
+  lastRequest: Date | null    // Last time token was used
+  expiresAt: Date | null      // Optional expiration date
+}
+```
+
+### Using PATs for Git operations
+
+When pushing or pulling private repositories, provide your PAT as the password:
+
+```bash
+# Clone a repository
+git clone https://username@your-instance.com/owner/repo.git
+# When prompted, enter your PAT as the password
+```
+
+Alternatively, include the token in the URL (less secure):
+```bash
+git clone https://username:gvx_your_token@your-instance.com/owner/repo.git
+```
+
+### Token authentication flow
+
+When you perform a Git operation, Gitflare:
+
+1. Extracts credentials from the HTTP Basic Auth header
+2. Verifies the token matches the repository owner's username
+3. Validates the token using Better Auth's `verifyApiKey` API
+4. Checks repository ownership and permissions
+5. Allows or denies the operation based on these checks
+
+### Token management
+
+From the Personal Access Tokens page, you can:
+
+<CardGroup cols={2}>
+  <Card title="View active tokens" icon="list">
+    See all your tokens with names, creation dates, and last usage
+  </Card>
+  <Card title="Delete tokens" icon="trash">
+    Revoke tokens you no longer need
+  </Card>
+  <Card title="Track usage" icon="chart-line">
+    Monitor when each token was last used
+  </Card>
+  <Card title="Identify tokens" icon="tag">
+    Use descriptive names to remember each token's purpose
+  </Card>
+</CardGroup>
+
+### Token security
+
+Gitflare implements several security measures for PATs:
+- Tokens are hashed before storage
+- Only the first few characters (`start`) are shown in the UI
+- Tokens can be individually revoked at any time
+- Failed authentication attempts are logged
+- Rate limiting can be enabled per token (currently disabled)
+
+## Git authentication rules
+
+Gitflare applies different authentication requirements based on the operation and repository visibility:
+
+### Pull operations (clone, fetch, pull)
+
+- **Public repositories**: No authentication required - anyone can read
+- **Private repositories**: Requires valid PAT from repository owner
+
+### Push operations
+
+- **All repositories**: Authentication always required
+- **Ownership check**: Only the repository owner can push
+- **Token validation**: Must use valid, non-expired PAT
+
+These rules are enforced in the `verifyAuth` function which:
+1. Checks if the repository exists
+2. Determines if authentication is needed based on operation and visibility
+3. Verifies the provided token (if any)
+4. Validates ownership for write operations
+
+## Better Auth configuration
+
+Gitflare's Better Auth setup includes:
+
+```typescript
+betterAuth({
+  baseURL: env.SITE_URL,
+  trustedOrigins: [env.SITE_URL],
+  database: drizzleAdapter(db, { provider: "sqlite" }),
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
+  advanced: {
+    useSecureCookies: true,
+  },
+  plugins: [
+    username(),
+    apiKey({
+      enableMetadata: true,
+      rateLimit: { enabled: false },
+    }),
+    tanstackStartCookies(),
+  ],
+});
+```
+
+This configuration:
+- Integrates with Cloudflare D1 via Drizzle
+- Enables email/password authentication
+- Uses secure cookies in production
+- Supports username-based routing
+- Provides API key functionality for Git auth
+- Works seamlessly with TanStack Start
+
+## Profile management
+
+From **Settings > Profile**, you can update:
+- **Display name**: Change how your name appears
+- **Profile image**: Automatically generated avatar based on username
+
+You cannot change:
+- Username (used in repository URLs)
+- Email address (account identifier)
+
+## Session security
+
+Better Auth tracks session metadata for security:
+- IP address of the connection
+- User agent string (browser/client info)
+- Session creation and update times
+- Explicit expiration timestamps
+
+All sessions are linked to user accounts with cascade deletion - when a user is deleted, all their sessions are automatically cleaned up.

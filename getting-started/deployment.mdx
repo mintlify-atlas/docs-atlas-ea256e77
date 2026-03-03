@@ -1,0 +1,387 @@
+---
+title: "Deployment"
+description: "Deploy Gitflare to Cloudflare Workers and manage your production environment"
+---
+
+Gitflare runs entirely on Cloudflare's serverless infrastructure, making deployment simple and scalable. This guide walks you through deploying your Gitflare instance to production.
+
+<Info>
+  Before deploying, ensure you've completed the [installation](/getting-started/installation) and [configuration](/getting-started/configuration) steps.
+</Info>
+
+## Pre-deployment checklist
+
+Before deploying to production, verify these items:
+
+<Steps>
+<Step title="Verify authentication">
+
+Ensure you're logged into Wrangler:
+
+```bash
+pnpm wrangler whoami
+```
+
+If not authenticated, run:
+
+```bash
+pnpm wrangler login
+```
+
+</Step>
+
+<Step title="Apply database migrations">
+
+Apply migrations to your production D1 database:
+
+```bash
+cd apps/web
+pnpm db:migrate:remote
+```
+
+</Step>
+
+<Step title="Set production secrets">
+
+Set your Better Auth secret for the production environment:
+
+```bash
+alchemy secret set BETTER_AUTH_SECRET
+```
+
+You'll be prompted to enter the secret value securely.
+
+<Warning>
+  Never commit secrets to version control. Use Alchemy's secret management or environment variables.
+</Warning>
+
+</Step>
+
+<Step title="Configure custom domain (optional)">
+
+If using a custom domain, update `PROD_DOMAIN` in `apps/web/alchemy.run.ts`:
+
+```typescript alchemy.run.ts
+const PROD_DOMAIN = "gitflare.yourdomain.com";
+```
+
+Then configure the domain in your Cloudflare dashboard and update DNS records to point to Cloudflare.
+
+</Step>
+</Steps>
+
+## Deployment process
+
+Gitflare uses Alchemy for deployment orchestration, which handles Workers, Durable Objects, and D1 database bindings automatically.
+
+<Steps>
+<Step title="Build the application">
+
+Build the production bundle:
+
+<CodeGroup>
+```bash root
+pnpm build
+```
+
+```bash web-only
+cd apps/web
+pnpm build
+```
+</CodeGroup>
+
+This compiles the TanStack Start application and prepares it for deployment.
+
+</Step>
+
+<Step title="Deploy to production">
+
+Deploy your application to Cloudflare Workers:
+
+```bash
+cd apps/web
+pnpm deploy
+```
+
+Alchemy handles the deployment of:
+- Cloudflare Worker with your application code
+- Durable Objects for Git repository storage
+- D1 database bindings
+- Custom domain configuration (if configured)
+
+<Note>
+  The first deployment may take a few minutes as Cloudflare provisions resources.
+</Note>
+
+</Step>
+
+<Step title="Verify deployment">
+
+After deployment completes, Alchemy outputs your Worker URL. Visit this URL to verify your deployment:
+
+```
+https://gitflare.your-subdomain.workers.dev
+```
+
+Or your custom domain if configured:
+
+```
+https://gitflare.yourdomain.com
+```
+
+</Step>
+</Steps>
+
+## Deployment environments
+
+Gitflare supports multiple deployment environments through Alchemy's stage management.
+
+### Local development
+
+Run the development server locally:
+
+```bash
+pnpm dev
+```
+
+This starts Alchemy in development mode with:
+- Hot module reloading
+- Local database bindings
+- `SITE_URL` set to `http://localhost:3000`
+- Debug logging enabled
+
+### Preview deployments
+
+For pull requests and testing, deploy preview environments:
+
+```bash
+alchemy deploy --stage preview
+```
+
+Preview deployments automatically:
+- Use a unique subdomain
+- Comment on GitHub PRs with the preview URL
+- Isolate database changes
+
+### Production deployment
+
+Deploy to production:
+
+```bash
+pnpm deploy
+```
+
+Production deployments:
+- Use your custom domain (if configured)
+- Set `LOG_LEVEL` to `warn`
+- Apply production secrets
+- Enable performance optimizations
+
+## Managing deployments
+
+### View deployment status
+
+Check the status of your deployed Worker:
+
+```bash
+pnpm wrangler deployments list
+```
+
+### Rollback deployment
+
+If you need to rollback to a previous deployment:
+
+```bash
+pnpm wrangler rollback
+```
+
+Follow the prompts to select which deployment to rollback to.
+
+### View logs
+
+Tail logs from your production Worker:
+
+```bash
+pnpm wrangler tail
+```
+
+This streams real-time logs from your Worker. Press `Ctrl+C` to stop.
+
+## Database management
+
+### Run migrations
+
+Apply new migrations to your production database:
+
+```bash
+pnpm db:migrate:remote
+```
+
+### Query production database
+
+Execute queries against your production D1 database:
+
+```bash
+pnpm wrangler d1 execute DB --remote --command="SELECT * FROM users LIMIT 10"
+```
+
+<Warning>
+  Be careful when running queries against production. Always test migrations locally first.
+</Warning>
+
+## Continuous deployment
+
+For automated deployments, integrate Gitflare with your CI/CD pipeline.
+
+### GitHub Actions example
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml deploy.yml
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 10.19.0
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Build
+        run: pnpm build
+      
+      - name: Deploy
+        run: cd apps/web && pnpm deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+```
+
+<Note>
+  Add `CLOUDFLARE_API_TOKEN` and `BETTER_AUTH_SECRET` to your GitHub repository secrets.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Deployment fails with authentication error">
+    Ensure you're logged into Wrangler:
+    
+    ```bash
+    pnpm wrangler login
+    ```
+    
+    Verify your authentication status:
+    
+    ```bash
+    pnpm wrangler whoami
+    ```
+  </Accordion>
+  
+  <Accordion title="Database migrations fail">
+    Check that your Cloudflare credentials are set correctly in `.env`:
+    
+    - `CLOUDFLARE_ACCOUNT_ID`
+    - `CLOUDFLARE_DATABASE_ID`
+    - `CLOUDFLARE_D1_TOKEN`
+    
+    Verify the database exists:
+    
+    ```bash
+    pnpm wrangler d1 list
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom domain not working">
+    Verify the domain is configured in `alchemy.run.ts`:
+    
+    ```typescript
+    const PROD_DOMAIN = "gitflare.yourdomain.com";
+    ```
+    
+    Ensure DNS records point to Cloudflare and the domain is active in your Cloudflare dashboard.
+  </Accordion>
+  
+  <Accordion title="Worker fails to start">
+    Check Worker logs for errors:
+    
+    ```bash
+    pnpm wrangler tail
+    ```
+    
+    Common issues:
+    - Missing environment variables
+    - Database migration not applied
+    - Durable Objects not properly bound
+  </Accordion>
+</AccordionGroup>
+
+## Monitoring and performance
+
+### Cloudflare dashboard
+
+Monitor your deployment from the Cloudflare Workers dashboard:
+
+1. Navigate to **Workers & Pages** in your Cloudflare account
+2. Select your `gitflare-web` Worker
+3. View metrics including:
+   - Request count
+   - Error rate
+   - CPU time
+   - Invocations
+
+### Performance optimization
+
+For optimal performance:
+
+- Enable caching for static assets
+- Use Cloudflare CDN for repository clones
+- Monitor Durable Object usage
+- Set appropriate `LOG_LEVEL` in production (`warn` or `error`)
+
+## Cleanup and teardown
+
+To remove your Gitflare deployment:
+
+```bash
+cd apps/web
+pnpm destroy
+```
+
+<Warning>
+  This permanently deletes your Worker, Durable Objects data, and associated resources. D1 databases are not automatically deleted.
+</Warning>
+
+To delete the D1 database:
+
+```bash
+pnpm wrangler d1 delete gitflare-db
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Development workflow" icon="code" href="/development/setup">
+    Learn about local development and testing
+  </Card>
+  
+  <Card title="API reference" icon="book" href="/api/git-protocol">
+    Explore Gitflare's API documentation
+  </Card>
+</CardGroup>

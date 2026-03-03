@@ -1,0 +1,62 @@
+---
+title: Branches
+description: Retrieve branch information from repositories
+---
+
+## Get branches
+
+Retrieve all branches from a repository, including the current default branch.
+
+```http
+GET /api/branches
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  The repository name
+</ParamField>
+
+### Response
+
+Returns an object containing the list of branches and the current default branch.
+
+<ResponseField name="branches" type="array">
+  Array of branch names in the repository
+</ResponseField>
+
+<ResponseField name="currentBranch" type="string">
+  The name of the current default branch (typically `main` or `master`)
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/branches?owner=johndoe&repo=my-project"
+```
+
+### Example response
+
+```json
+{
+  "branches": [
+    "main",
+    "develop",
+    "feature/user-auth",
+    "feature/api-integration",
+    "hotfix/security-patch"
+  ],
+  "currentBranch": "main"
+}
+```
+
+### Usage notes
+
+- The `currentBranch` field indicates the repository's default branch that is checked out when the repository is cloned
+- Branch names are returned as an array of strings, ordered alphabetically
+- This endpoint does not require authentication for public repositories
+- For private repositories, you must be authenticated and have access to the repository

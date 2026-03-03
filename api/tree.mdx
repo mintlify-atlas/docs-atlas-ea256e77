@@ -1,0 +1,173 @@
+---
+title: Tree
+description: Browse repository file structure and retrieve file contents
+---
+
+## Get tree
+
+Retrieve the directory structure (tree) of a repository at a specific path and reference.
+
+```http
+GET /api/tree
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  The repository name
+</ParamField>
+
+<ParamField path="ref" type="string">
+  The branch, tag, or commit reference to retrieve the tree from. Defaults to the default branch if not specified
+</ParamField>
+
+<ParamField path="path" type="string">
+  The directory path to retrieve. Defaults to the repository root if not specified
+</ParamField>
+
+### Response
+
+Returns an array of tree entries representing files and directories.
+
+<ResponseField name="type" type="string">
+  Entry type: `tree` for directories or `blob` for files
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  Path to the file or directory
+</ResponseField>
+
+<ResponseField name="oid" type="string">
+  Object ID (SHA-1 hash) of the tree or blob
+</ResponseField>
+
+<ResponseField name="mode" type="string">
+  Git file mode (e.g., `100644` for regular files, `040000` for directories)
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/tree?owner=johndoe&repo=my-project&ref=main&path=src"
+```
+
+### Example response
+
+```json
+[
+  {
+    "type": "tree",
+    "path": "src/components",
+    "oid": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+    "mode": "040000"
+  },
+  {
+    "type": "blob",
+    "path": "src/index.ts",
+    "oid": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1",
+    "mode": "100644"
+  },
+  {
+    "type": "blob",
+    "path": "src/app.ts",
+    "oid": "c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2",
+    "mode": "100644"
+  }
+]
+```
+
+---
+
+## Get blob
+
+Retrieve the contents of a specific file (blob) from the repository.
+
+```http
+GET /api/blob
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  The repository name
+</ParamField>
+
+<ParamField path="filepath" type="string" required>
+  The path to the file relative to the repository root
+</ParamField>
+
+<ParamField path="ref" type="string">
+  The branch, tag, or commit reference to retrieve the file from. Defaults to the default branch if not specified
+</ParamField>
+
+### Response
+
+Returns an object containing the file content and metadata.
+
+<ResponseField name="oid" type="string">
+  Object ID (SHA-1 hash) of the blob
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Base64-encoded file content
+</ResponseField>
+
+<ResponseField name="size" type="number">
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="isBinary" type="boolean">
+  Whether the file is detected as binary content
+</ResponseField>
+
+<ResponseField name="highlightedHtml" type="string | null">
+  Syntax-highlighted HTML version of the file content. Only available for non-binary, non-markdown files. Uses the `github-dark-default` theme
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/blob?owner=johndoe&repo=my-project&filepath=src/index.ts&ref=main"
+```
+
+### Example response
+
+```json
+{
+  "oid": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1",
+  "content": "aW1wb3J0IHsgQXBwIH0gZnJvbSAnLi9hcHAnOwoKY29uc3QgYXBwID0gbmV3IEFwcCgpOwphcHAuc3RhcnQoKTs=",
+  "size": 64,
+  "isBinary": false,
+  "highlightedHtml": "<pre class=\"shiki github-dark-default\" style=\"background-color:#0d1117;color:#e6edf3\" tabindex=\"0\"><code>...</code></pre>"
+}
+```
+
+### Usage notes
+
+- The `content` field contains the raw file content encoded as Base64. Decode it to get the original file content
+- For text files, the `highlightedHtml` field provides a ready-to-use syntax-highlighted HTML version using Shiki with the `github-dark-default` theme
+- Markdown files (`.md`, `.mdx`, `.markdown`) do not include syntax highlighting in `highlightedHtml`
+- Binary files have `isBinary` set to `true` and `highlightedHtml` set to `null`
+- If a file is not found, the endpoint returns a 404 error
+
+### Decoding content
+
+To decode the Base64 content in JavaScript:
+
+```javascript
+const decodedContent = atob(response.content);
+```
+
+Or in Node.js:
+
+```javascript
+const decodedContent = Buffer.from(response.content, 'base64').toString('utf-8');
+```

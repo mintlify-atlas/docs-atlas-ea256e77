@@ -1,0 +1,150 @@
+---
+title: Issue tracking
+description: Track bugs, feature requests, and tasks with Gitflare's built-in issue tracker
+---
+
+Gitflare includes a lightweight issue tracking system integrated directly into each repository, allowing you to manage bugs, feature requests, and tasks without leaving your Git hosting platform.
+
+## Viewing issues
+
+Access the issues list for any repository at `/$owner/$repo/issues`. The issues page displays:
+
+<CardGroup cols={2}>
+  <Card title="Issue title" icon="heading">
+    The main title of each issue, clickable to view full details
+  </Card>
+  <Card title="Issue number" icon="hashtag">
+    Auto-incrementing number unique within the repository (e.g., #1, #2, #3)
+  </Card>
+  <Card title="Creator information" icon="user">
+    Username of the person who created the issue
+  </Card>
+  <Card title="Creation time" icon="clock">
+    Relative timestamp showing when the issue was opened (e.g., "2 hours ago")
+  </Card>
+</CardGroup>
+
+The list view shows all issues in a clean, scannable format with dividers between items.
+
+### Empty state
+
+If a repository has no issues, you'll see a message with a call-to-action button to create the first issue.
+
+## Creating issues
+
+Click "New Issue" from the issues list, or navigate directly to `/$owner/$repo/issues/new`. The creation form includes:
+
+### Title field
+
+- **Required**: Must be at least 1 character
+- **Maximum length**: 200 characters
+- **Purpose**: Brief summary of the issue
+
+### Description field
+
+- **Optional**: Can be left empty
+- **Maximum length**: 10,000 characters
+- **Purpose**: Detailed explanation, reproduction steps, or additional context
+- **Format**: Plain text with multi-line support via textarea
+
+When you submit the form:
+1. Gitflare validates your authentication
+2. Fetches the repository to verify it exists
+3. Retrieves the last issue number for this repository
+4. Creates a new issue with an auto-incremented number
+5. Redirects you to the issues list with a success notification
+
+## Issue structure
+
+Each issue in the database contains:
+
+```typescript
+interface Issue {
+  id: number              // Unique issue ID across all repositories
+  repositoryId: number    // Links to the parent repository
+  fullName: string        // Repository identifier ("owner/repo")
+  number: number          // Auto-incrementing number within repository
+  title: string           // Issue title
+  body: string | null     // Optional description
+  status: "open" | "closed"  // Current issue state
+  creatorId: string       // User ID of creator
+  creatorUsername: string // Username of creator
+  createdAt: Date         // Creation timestamp
+  updatedAt: Date         // Last modification timestamp
+}
+```
+
+## Issue status management
+
+Issues can be in one of two states:
+- **Open**: Active issues that need attention
+- **Closed**: Resolved or completed issues
+
+The issue creator can change the status to close or reopen issues. This is managed through the `updateIssueStatus` API with the following rules:
+- Only the issue creator can update the status
+- You must be logged in to perform updates
+- The issue must exist in the specified repository
+
+## Viewing individual issues
+
+Navigate to `/$owner/$repo/issues/$issueNumber` to view a specific issue. The issue detail page shows:
+- Full issue title and description
+- Current status (open or closed)
+- Creator information and timestamps
+- Issue metadata like the unique number
+
+## Comments system
+
+Gitflare's database schema includes support for comments on issues:
+
+<CardGroup cols={2}>
+  <Card title="Comment author" icon="user">
+    Each comment is linked to a user account with author ID and username
+  </Card>
+  <Card title="Comment body" icon="message-square">
+    Text content of the comment
+  </Card>
+  <Card title="Issue association" icon="link">
+    Comments reference their parent issue via `issueId`
+  </Card>
+  <Card title="Timestamps" icon="calendar">
+    Track when comments are created and last updated
+  </Card>
+</CardGroup>
+
+Comments are automatically deleted when their parent issue is deleted through cascading database constraints.
+
+## Issue indexes and performance
+
+Gitflare optimizes issue queries with database indexes on:
+- `repositoryId`: Fast lookups for all issues in a repository
+- `fullName`: Quick filtering by repository full name
+- `number`: Efficient retrieval of specific issue numbers
+- `status`: Rapid filtering by open or closed status
+
+These indexes ensure the issues list loads quickly even in repositories with hundreds of issues.
+
+## Integration with repositories
+
+Issues are tightly integrated with repositories:
+- Each repository has its own issue namespace with independent numbering
+- Deleting a repository cascades to delete all its issues
+- Issue numbers start at 1 for each repository
+- The `fullName` field ("owner/repo") allows cross-repository issue queries
+
+## Issue deletion
+
+Issues are automatically deleted when:
+- The parent repository is deleted (cascade delete)
+- The user who created the issue is deleted (cascade delete)
+
+This ensures data consistency and prevents orphaned issues.
+
+## Future enhancements
+
+While the current implementation provides core issue tracking, the schema supports future additions like:
+- Issue labels and categorization
+- Assignees and collaborators
+- Issue templates
+- Milestone tracking
+- Advanced filtering and search

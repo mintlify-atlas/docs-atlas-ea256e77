@@ -1,0 +1,353 @@
+---
+title: Authentication
+description: Learn how to authenticate with Gitflare using email/password and manage user sessions
+---
+
+Gitflare uses [Better Auth](https://better-auth.com) for authentication, providing secure session management and multiple authentication methods. All authentication endpoints are available under `/api/auth`.
+
+## Authentication methods
+
+Gitflare supports the following authentication methods:
+
+- Email and password authentication
+- Session-based authentication with secure cookies
+- Personal access tokens for Git operations
+
+## Base URL
+
+All authentication endpoints are relative to your Gitflare instance:
+
+```
+https://your-gitflare-instance.com/api/auth
+```
+
+## Sign up
+
+Create a new user account with email and password.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/sign-up/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123",
+    "name": "Jane Doe",
+    "username": "janedoe"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/sign-up/email', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'securepassword123',
+    name: 'Jane Doe',
+    username: 'janedoe',
+  }),
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  User's email address. Must be a valid email format.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password. Must be at least 8 characters long.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  User's display name. Must be at least 2 characters long.
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  Unique username for the user. Must be at least 3 characters long. This username will be used in repository URLs (e.g., `username/repo`).
+</ParamField>
+
+### Response
+
+<ResponseField name="user" type="object">
+  The created user object.
+  
+  <Expandable title="user properties">
+    <ResponseField name="id" type="string">
+      Unique user identifier.
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User's email address.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's display name.
+    </ResponseField>
+    
+    <ResponseField name="username" type="string">
+      User's unique username.
+    </ResponseField>
+    
+    <ResponseField name="emailVerified" type="boolean">
+      Whether the email has been verified.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="timestamp">
+      Account creation timestamp in milliseconds.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="session" type="object">
+  Session information for the authenticated user.
+  
+  <Expandable title="session properties">
+    <ResponseField name="id" type="string">
+      Unique session identifier.
+    </ResponseField>
+    
+    <ResponseField name="token" type="string">
+      Session token (set as HTTP-only cookie).
+    </ResponseField>
+    
+    <ResponseField name="expiresAt" type="timestamp">
+      Session expiration timestamp.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Sign in
+
+Authenticate an existing user with email and password.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/sign-in/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/sign-in/email', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'securepassword123',
+  }),
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  User's email address.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password.
+</ParamField>
+
+### Response
+
+Returns the same user and session structure as sign up.
+
+## Get session
+
+Retrieve the current authenticated user's session information.
+
+<CodeGroup>
+```bash cURL
+curl https://your-gitflare-instance.com/api/auth/get-session \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/get-session', {
+  credentials: 'include', // Include cookies
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="user" type="object">
+  The authenticated user object with all user properties.
+</ResponseField>
+
+<ResponseField name="session" type="object">
+  Current session information including token and expiration.
+</ResponseField>
+
+Returns `null` if no active session exists.
+
+## Sign out
+
+End the current user session.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/sign-out \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/sign-out', {
+  method: 'POST',
+  credentials: 'include',
+});
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the sign-out was successful.
+</ResponseField>
+
+## Update user
+
+Update the authenticated user's profile information.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-gitflare-instance.com/api/auth/update-user \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=YOUR_SESSION_TOKEN" \
+  -d '{
+    "name": "Jane Smith"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://your-gitflare-instance.com/api/auth/update-user', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    name: 'Jane Smith',
+  }),
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Request body
+
+<ParamField body="name" type="string">
+  User's display name. Must be at least 2 characters.
+</ParamField>
+
+<Note>
+  Username and email cannot be changed after account creation.
+</Note>
+
+### Response
+
+Returns the updated user object.
+
+## Authentication flow
+
+Gitflare uses session-based authentication with secure HTTP-only cookies:
+
+1. **Sign up or sign in**: User provides credentials via POST request
+2. **Session creation**: Server creates a session and sets an HTTP-only cookie
+3. **Authenticated requests**: Browser automatically includes the session cookie
+4. **Session validation**: Server validates the session on each request
+5. **Sign out**: Session is invalidated and cookie is cleared
+
+### Security features
+
+- **HTTP-only cookies**: Session tokens are stored in HTTP-only cookies, preventing XSS attacks
+- **Secure cookies**: Cookies are only transmitted over HTTPS in production
+- **Password hashing**: Passwords are securely hashed using industry-standard algorithms
+- **Session expiration**: Sessions automatically expire after a period of inactivity
+
+## Using authentication in your application
+
+### With the Better Auth client
+
+Gitflare uses the Better Auth React client for seamless authentication:
+
+```javascript
+import { authClient } from '@/lib/auth-client';
+
+// Sign up
+await authClient.signUp.email({
+  email: 'user@example.com',
+  password: 'securepassword123',
+  name: 'Jane Doe',
+  username: 'janedoe',
+});
+
+// Sign in
+await authClient.signIn.email({
+  email: 'user@example.com',
+  password: 'securepassword123',
+});
+
+// Get session
+const { data } = await authClient.getSession();
+
+// Sign out
+await authClient.signOut();
+```
+
+### For Git operations
+
+For Git operations (push, pull, clone), use [personal access tokens](/api/personal-access-tokens) instead of password authentication:
+
+```bash
+git clone https://username:TOKEN@your-gitflare-instance.com/owner/repo.git
+```
+
+## Error responses
+
+Authentication endpoints return standard HTTP error codes:
+
+<ResponseField name="error" type="object">
+  Error information when a request fails.
+  
+  <Expandable title="error properties">
+    <ResponseField name="message" type="string">
+      Human-readable error message.
+    </ResponseField>
+    
+    <ResponseField name="statusText" type="string">
+      HTTP status text.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Common error codes
+
+- `400 Bad Request`: Invalid request parameters or validation errors
+- `401 Unauthorized`: Invalid credentials or expired session
+- `409 Conflict`: Email or username already exists (during sign up)
+- `500 Internal Server Error`: Server-side error
+
+## See also
+
+- [Personal Access Tokens](/api/personal-access-tokens) - Generate tokens for Git operations
+- [Access Control](/guides/access-control) - Manage repository permissions
+- [Better Auth Documentation](https://better-auth.com) - Learn more about the authentication system

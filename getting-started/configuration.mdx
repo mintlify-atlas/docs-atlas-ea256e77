@@ -1,0 +1,242 @@
+---
+title: "Configuration"
+description: "Configure environment variables and Cloudflare services for Gitflare"
+---
+
+Before running or deploying Gitflare, you need to configure environment variables and set up Cloudflare services.
+
+## Environment variables
+
+Gitflare uses environment variables to configure authentication, database connections, and deployment settings.
+
+<Steps>
+<Step title="Create environment file">
+
+Navigate to the web application directory and create a `.env` file based on the example:
+
+```bash
+cd apps/web
+cp .env.example .env
+```
+
+</Step>
+
+<Step title="Configure Better Auth">
+
+Set the Better Auth secret for handling authentication:
+
+```bash .env
+BETTER_AUTH_SECRET=your-secret-key-here
+```
+
+<Warning>
+  Generate a secure random string for production. You can use `openssl rand -base64 32` to generate a secure secret.
+</Warning>
+
+The application automatically sets `VITE_BETTER_AUTH_URL` based on your deployment environment:
+- **Local**: `http://localhost:3000`
+- **Preview**: Cloudflare Workers preview URL
+- **Production**: Your custom domain
+
+</Step>
+
+<Step title="Configure Cloudflare credentials">
+
+For database migrations and remote operations, set your Cloudflare credentials:
+
+```bash .env
+CLOUDFLARE_ACCOUNT_ID=your-account-id
+CLOUDFLARE_DATABASE_ID=your-d1-database-id
+CLOUDFLARE_D1_TOKEN=your-api-token
+```
+
+To find these values:
+
+1. **Account ID**: Found in the Cloudflare dashboard URL or Workers page
+2. **Database ID**: Created when you set up your D1 database (see below)
+3. **D1 Token**: Generate an API token with D1 permissions in Cloudflare dashboard → API Tokens
+
+</Step>
+</Steps>
+
+## Cloudflare services setup
+
+Gitflare uses several Cloudflare services that need to be configured.
+
+### D1 Database
+
+Gitflare uses Cloudflare D1 for storing user data, repository metadata, and issues.
+
+<Steps>
+<Step title="Authenticate with Cloudflare">
+
+Authenticate the Wrangler CLI with your Cloudflare account:
+
+```bash
+pnpm wrangler login
+```
+
+This opens your browser to authorize Wrangler.
+
+</Step>
+
+<Step title="Create D1 database">
+
+Create a new D1 database for Gitflare:
+
+```bash
+pnpm wrangler d1 create gitflare-db
+```
+
+This command outputs your database ID. Copy this ID to your `.env` file as `CLOUDFLARE_DATABASE_ID`.
+
+</Step>
+
+<Step title="Run database migrations">
+
+Apply the database schema migrations:
+
+<CodeGroup>
+```bash local
+pnpm db:migrate:local
+```
+
+```bash remote
+pnpm db:migrate:remote
+```
+</CodeGroup>
+
+Use `db:migrate:local` for your local development database and `db:migrate:remote` for your production database.
+
+</Step>
+</Steps>
+
+### Durable Objects
+
+Gitflare uses Durable Objects to store Git repository data. These are automatically configured through the `alchemy.run.ts` file:
+
+```typescript alchemy.run.ts
+const repoDO = DurableObjectNamespace("repos", {
+  className: "Repo",
+  sqlite: true,
+});
+```
+
+Each repository gets its own Durable Object instance with SQLite-backed storage.
+
+<Note>
+  Durable Objects are automatically deployed when you deploy your Worker. No manual setup is required.
+</Note>
+
+## Alchemy configuration
+
+Gitflare uses Alchemy for deployment and infrastructure management. The configuration is in `apps/web/alchemy.run.ts`.
+
+### Key configuration options
+
+```typescript
+const app = await alchemy("gitflare", {
+  stateStore: (scope) => new CloudflareStateStore(scope),
+});
+```
+
+**Bindings**: The TanStack Start application receives these environment bindings:
+
+- `REPO`: Durable Object namespace for repositories
+- `DB`: D1 database connection
+- `LOG_LEVEL`: Logging level (`debug` for dev, `warn` for prod)
+- `SITE_URL`: Current deployment URL
+- `VITE_BETTER_AUTH_URL`: Better Auth endpoint URL
+- `BETTER_AUTH_SECRET`: Authentication secret
+
+### Custom domain
+
+To use a custom domain in production, update the `PROD_DOMAIN` constant in `alchemy.run.ts`:
+
+```typescript alchemy.run.ts
+const PROD_DOMAIN = "gitflare.yourdomain.com";
+```
+
+Make sure to configure the domain in your Cloudflare dashboard and update your DNS records.
+
+## Database schema management
+
+Gitflare uses Drizzle ORM for type-safe database operations.
+
+### Generate migrations
+
+After modifying database schemas in `apps/web/src/db/schema/`, generate new migrations:
+
+```bash
+pnpm db:generate
+```
+
+This creates migration files in the `migrations/` directory.
+
+### Configuration
+
+Drizzle is configured in `drizzle.config.ts`:
+
+```typescript drizzle.config.ts
+export default defineConfig({
+  schema: "./src/db/schema/**.ts",
+  out: "./migrations",
+  dialect: "sqlite",
+  driver: "d1-http",
+  dbCredentials: {
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+    databaseId: process.env.CLOUDFLARE_DATABASE_ID ?? "",
+    token: process.env.CLOUDFLARE_D1_TOKEN ?? "",
+  },
+});
+```
+
+## Verify configuration
+
+Before starting development or deploying, verify your configuration:
+
+<Steps>
+<Step title="Check type definitions">
+
+Generate TypeScript types for Cloudflare Workers:
+
+```bash
+pnpm cf-typegen
+```
+
+</Step>
+
+<Step title="Run type checking">
+
+Ensure all types are correct:
+
+```bash
+pnpm typecheck
+```
+
+</Step>
+
+<Step title="Start local development">
+
+Start the development server to verify everything works:
+
+```bash
+pnpm dev
+```
+
+Your application should be available at `http://localhost:3000`.
+
+</Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/getting-started/deployment">
+    Deploy your configured Gitflare instance to Cloudflare Workers
+  </Card>
+  
+  <Card title="Development" icon="code" href="/development/setup">
+    Learn about the development workflow and available commands
+  </Card>
+</CardGroup>

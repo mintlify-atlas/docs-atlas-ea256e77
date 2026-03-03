@@ -1,0 +1,530 @@
+---
+title: Storage architecture
+description: Understanding DOFS and the virtualized file system that powers Git repository storage
+---
+
+Gitflare uses a virtualized file system built on top of Durable Object SQLite storage to provide POSIX-like file operations. This enables isomorphic-git to work seamlessly in a serverless environment.
+
+## DOFS: Durable Object File System
+
+[DOFS](https://github.com/benallfree/dofs/) is a file system abstraction that provides a familiar file/directory API backed by SQLite:
+
+```typescript
+const dofs = new Fs(ctx, env, { chunkSize: 512 * 1024 });
+
+// Set maximum storage capacity
+dofs.setDeviceSize(5 * 1024 * 1024 * 1024); // 5GB
+
+// Write a file
+await dofs.writeFile("/repo/objects/abc123", buffer);
+
+// Read a file
+const data = dofs.read("/repo/objects/abc123");
+
+// List directory
+const files = dofs.listDir("/repo/objects");
+```
+
+DOFS handles:
+- Path normalization and validation
+- File metadata (size, timestamps, permissions)
+- Directory structure
+- Large file chunking
+- Transactional updates
+
+## File system adapter for isomorphic-git
+
+Isomorphic-git expects a Node.js-style `fs.promises` API. Gitflare provides an adapter in `apps/web/src/do/fs.ts:56-361`:
+
+```typescript
+export class IsoGitFs {
+  private readonly dofs: Fs;
+
+  constructor(dofs: Fs) {
+    this.dofs = dofs;
+  }
+
+  getPromiseFsClient() {
+    return {
+      promises: {
+        readFile: this.readFile.bind(this),
+        writeFile: this.writeFile.bind(this),
+        unlink: this.unlink.bind(this),
+        readdir: this.readdir.bind(this),
+        mkdir: this.mkdir.bind(this),
+        rmdir: this.rmdir.bind(this),
+        stat: this.stat.bind(this),
+        lstat: this.lstat.bind(this),
+        readlink: this.readlink.bind(this),
+        symlink: this.symlink.bind(this),
+      },
+    };
+  }
+}
+```
+
+This adapter:
+1. Translates fs.promises calls to DOFS operations
+2. Handles path normalization
+3. Converts error codes to Node.js-compatible formats
+4. Manages encoding/decoding of file contents
+
+### Path normalization
+
+All paths are normalized to handle various input formats:
+
+```typescript
+function normalizePath(p: string): string {
+  let path = p;
+  if (!path) return "/";
+  
+  // Strip query/hash
+  path = path.split("?")[0].split("#")[0];
+  
+  // Replace backslashes and ensure leading slash
+  path = path.replace(/\\/g, "/");
+  if (!path.startsWith("/")) path = `/${path}`;
+  
+  // Resolve '.' and '..'
+  const out: string[] = [];
+  for (const rawSeg of path.split("/")) {
+    const seg = rawSeg.trim();
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (out.length) out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  
+  return `/${out.join("/")}`;
+}
+```
+
+This ensures:
+- Consistent path format (always starts with `/`)
+- No relative path traversal issues
+- Handles Windows-style paths
+- Resolves `.` and `..` segments
+
+### File operations
+
+Each fs operation is mapped to DOFS:
+
+#### Reading files
+
+```typescript
+async readFile(
+  path: string,
+  options: { encoding?: BufferEncoding } | BufferEncoding
+) {
+  const encoding = typeof options === "string" ? options : options?.encoding;
+  const normalizedPath = normalizePath(path);
+  
+  try {
+    const data = this.dofs.read(normalizedPath, { encoding });
+    const dataBuff = Buffer.from(data);
+    
+    if (!encoding || encoding === "buffer") return dataBuff;
+    return dataBuff.toString(encoding);
+  } catch (error) {
+    this.annotateAndThrow(error, "readFile", normalizedPath);
+  }
+}
+```
+
+#### Writing files
+
+```typescript
+async writeFile(
+  filepath: string,
+  data: string | ArrayBufferView | ArrayBuffer,
+  options?: { encoding?: BufferEncoding } | BufferEncoding
+) {
+  const encoding = typeof options === "string" ? options : options?.encoding;
+  
+  let arrayLike: ArrayBuffer | string;
+  if (typeof data === "string") {
+    arrayLike = data;
+  } else if (data instanceof ArrayBuffer) {
+    arrayLike = data;
+  } else {
+    // Handle ArrayBufferView (Uint8Array, etc.)
+    const view = data as ArrayBufferView;
+    const copy = new Uint8Array(view.byteLength);
+    copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    arrayLike = copy.buffer;
+  }
+  
+  const normalizedPath = normalizePath(filepath);
+  try {
+    await this.dofs.writeFile(normalizedPath, arrayLike, { encoding });
+  } catch (error) {
+    this.annotateAndThrow(error, "writeFile", normalizedPath);
+  }
+}
+```
+
+#### Directory operations
+
+```typescript
+async readdir(path: string) {
+  const normalizedPath = normalizePath(path);
+  try {
+    const names = this.dofs.listDir(normalizedPath, {});
+    return names.filter((n) => n !== "." && n !== "..");
+  } catch (error) {
+    this.annotateAndThrow(error, "readdir", normalizedPath);
+    return [];
+  }
+}
+
+async mkdir(path: string, options?: { recursive?: boolean; mode?: number }) {
+  const normalizedPath = normalizePath(path);
+  try {
+    this.dofs.mkdir(normalizedPath, { recursive: true, ...options });
+  } catch (error) {
+    this.annotateAndThrow(error, "mkdir", normalizedPath);
+  }
+}
+```
+
+### Error handling
+
+The adapter maps DOFS errors to Node.js-style error codes:
+
+```typescript
+class ErrorWithCode extends Error {
+  code?: string;
+  path?: string;
+  syscall?: string;
+}
+
+private ensureErrCode(error: Error) {
+  const e = new ErrorWithCode(error.message);
+  if (e.code) return e;
+  
+  // Try to extract error code from message
+  const msg = e.message.trim();
+  const KNOWN_CODES = new Set([
+    "ENOENT",   // No such file or directory
+    "ENOTDIR",  // Not a directory
+    "EISDIR",   // Is a directory
+    "EEXIST",   // File exists
+    "EPERM",    // Operation not permitted
+    "EACCES",   // Permission denied
+    "EINVAL",   // Invalid argument
+    "EBUSY",    // Device or resource busy
+    "ENOSPC",   // No space left on device
+    "ENOTEMPTY" // Directory not empty
+  ]);
+  
+  if (KNOWN_CODES.has(msg)) {
+    e.code = msg;
+    return e;
+  }
+  
+  // Parse from message like "ENOENT: no such file"
+  const parts = msg.split(":").join(" ").split(" ");
+  for (const part of parts) {
+    if (KNOWN_CODES.has(part)) {
+      e.code = part;
+      return e;
+    }
+  }
+}
+
+private annotateAndThrow(error: unknown, syscall: string, path: string) {
+  if (error instanceof Error) {
+    const e = this.ensureErrCode(error);
+    if (!e) return;
+    e.path = path;
+    e.syscall = syscall;
+    throw e;
+  }
+  throw error;
+}
+```
+
+This ensures isomorphic-git receives familiar error codes and can handle them appropriately.
+
+## Git repository structure
+
+The virtualized file system stores a standard Git bare repository structure:
+
+```
+/repo/
+├── HEAD                    # Current branch reference
+├── config                  # Repository configuration
+├── objects/               # Git objects storage
+│   ├── pack/             # Packfiles
+│   │   ├── pack-*.pack   # Packed objects
+│   │   └── pack-*.idx    # Pack index files
+│   ├── 00/               # Loose objects (sharded by first 2 chars)
+│   │   └── 123abc...     # Object files
+│   ├── 01/
+│   └── ...
+└── refs/                  # References (branches, tags)
+    ├── heads/            # Branches
+    │   ├── main
+    │   └── feature-x
+    └── tags/             # Tags
+        └── v1.0.0
+```
+
+Key components:
+
+### HEAD file
+
+Points to the current branch:
+
+```
+ref: refs/heads/main
+```
+
+### Objects directory
+
+Contains all Git objects:
+
+- **Loose objects**: Individual files in `objects/XX/YYYYYY...` where `XXYYYYYY...` is the SHA-1 hash
+- **Packfiles**: Multiple objects compressed together in `objects/pack/pack-*.pack`
+- **Pack indexes**: Provide fast lookup into packfiles
+
+### References directory
+
+Contains pointers to commits:
+
+- **Branches**: `refs/heads/*` files containing commit SHA-1
+- **Tags**: `refs/tags/*` files containing commit or tag object SHA-1
+
+## File chunking
+
+DOFS automatically splits large files into chunks for efficient storage:
+
+```typescript
+const dofs = new Fs(ctx, env, { chunkSize: 512 * 1024 }); // 512KB chunks
+```
+
+When you write a large file:
+
+1. File is split into 512KB chunks
+2. Each chunk is stored as a separate SQLite row
+3. Metadata tracks chunk count and total size
+4. Reads automatically reassemble chunks
+
+This approach:
+- Avoids SQLite row size limits
+- Enables efficient partial reads
+- Improves performance for large files
+- Reduces memory usage (stream chunks instead of loading entire file)
+
+<Note>
+512KB chunks provide a good balance between performance and storage efficiency for Git objects, which typically range from a few KB (commits, trees) to several MB (large blobs).
+</Note>
+
+## Stat operations
+
+Isomorphic-git frequently checks file metadata using `stat()` and `lstat()`:
+
+```typescript
+statCore(path: string, detectSymlink: boolean) {
+  let isSymlink = false;
+  const normalizedPath = normalizePath(path);
+  
+  if (detectSymlink) {
+    try {
+      this.dofs.readlink(normalizedPath);
+      isSymlink = true;
+    } catch (error) {
+      if (error instanceof Error && error.message === "ENOENT") {
+        isSymlink = false;
+      }
+    }
+  }
+
+  try {
+    const stat = this.dofs.stat(normalizedPath);
+    const atime = stat.atime ? new Date(stat.atime) : new Date(0);
+    const mtime = stat.mtime ? new Date(stat.mtime) : new Date(0);
+    const ctime = stat.ctime ? new Date(stat.ctime) : new Date(0);
+    const birthtime = stat.crtime ? new Date(stat.crtime) : new Date(0);
+
+    return {
+      isFile: () => stat.isFile,
+      isDirectory: () => stat.isDirectory,
+      isSymbolicLink: () => isSymlink,
+      mode: stat.mode ?? 0,
+      size: stat.size ?? 0,
+      atime,
+      mtime,
+      ctime,
+      birthtime,
+      // ... other fields
+    };
+  } catch (error) {
+    this.annotateAndThrow(error, "stat", normalizedPath);
+  }
+}
+
+async stat(path: string) {
+  return this.statCore(path, false);
+}
+
+async lstat(path: string) {
+  return this.statCore(path, true);
+}
+```
+
+The difference:
+- `stat()`: Follows symlinks and returns info about the target
+- `lstat()`: Returns info about the symlink itself
+
+## Symlink support
+
+Git uses symlinks for some internal structures. DOFS supports them:
+
+```typescript
+async symlink(target: string, path: string) {
+  try {
+    return this.dofs.symlink(target, path);
+  } catch (error) {
+    this.annotateAndThrow(error, "symlink", path);
+  }
+}
+
+async readlink(path: string) {
+  try {
+    return this.dofs.readlink(path);
+  } catch (error) {
+    this.annotateAndThrow(error, "readlink", path);
+  }
+}
+```
+
+Symlinks are stored as special entries in SQLite with the target path.
+
+## Performance optimizations
+
+### Caching
+
+The GitService maintains an in-memory cache for frequently accessed objects:
+
+```typescript
+class GitService {
+  private readonly cache: object = {};
+
+  async readObject(oid: string) {
+    return await git.readObject({
+      fs: this.fs,
+      gitdir: this.gitdir,
+      oid,
+      cache: this.cache,
+    });
+  }
+}
+```
+
+This reduces SQLite queries for hot objects like:
+- Recent commits
+- Branch tips
+- Frequently accessed files
+
+### Transactional writes
+
+DOFS uses SQLite transactions for atomic updates:
+
+```typescript
+// Multiple operations in a single transaction
+await dofs.writeFile("/repo/refs/heads/main", newCommitHash);
+await dofs.writeFile("/repo/objects/aa/bbccdd...", objectData);
+// Both writes succeed or both fail
+```
+
+This ensures consistency even if a request is interrupted.
+
+### Lazy loading
+
+The web UI loads repository data on-demand:
+
+```typescript
+async getTree(args: { ref?: string; path?: string }) {
+  const { ref, path } = args;
+
+  // Only load the tree at the requested path
+  const tree = await this.git.getTree(resolvedRef, path);
+
+  // Fetch last commit for each entry (parallelized)
+  const data = await Promise.all(
+    tree.map(async (item) => {
+      const lastCommit = await this.git.getLog({
+        ref,
+        depth: 1,
+        filepath: path ? `${path}/${item.path}` : item.path,
+      });
+      return { ...item, lastCommit: lastCommit[0] || null };
+    })
+  );
+  
+  return data;
+}
+```
+
+Only the current directory is loaded, not the entire repository tree.
+
+## Storage limits and considerations
+
+Cloudflare Durable Objects have a 5GB storage limit per instance. For Git repositories:
+
+**Typical repository sizes**:
+- Small project: < 100 MB
+- Medium project: 100 MB - 1 GB
+- Large project: 1 GB - 5 GB
+- Very large project: > 5 GB
+
+**Storage breakdown**:
+- Git objects: Majority of space (commits, trees, blobs)
+- Packfiles: Compressed objects, typically 40-60% smaller than loose objects
+- Indexes: Minimal overhead (< 1% of repository size)
+- Metadata: Negligible (< 1 MB)
+
+<Info>
+For repositories approaching 5GB, you can implement a tiered storage strategy: keep recent objects in the Durable Object and move old packfiles to R2 (Cloudflare's object storage).
+</Info>
+
+## Debugging and introspection
+
+You can query storage statistics:
+
+```typescript
+getDeviceStats() {
+  return this.dofs.getDeviceStats();
+}
+```
+
+Returns:
+
+```json
+{
+  "deviceSize": 5368709120,
+  "usedSpace": 156238080,
+  "freeSpace": 5212471040,
+  "fileCount": 1247,
+  "directoryCount": 42
+}
+```
+
+This helps monitor:
+- Storage usage trends
+- Number of objects in the repository
+- When to trigger cleanup or archival
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Durable Objects" href="/concepts/durable-objects" icon="database">
+    Learn how Durable Objects manage repository state
+  </Card>
+  <Card title="Architecture overview" href="/concepts/architecture" icon="diagram-project">
+    Understand the complete system design
+  </Card>
+</CardGroup>

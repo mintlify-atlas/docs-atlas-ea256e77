@@ -1,80 +1,351 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get your own Gitflare instance running on Cloudflare in minutes
 ---
 
-## Get started in three steps
+This guide will walk you through deploying Gitflare on your Cloudflare account, creating your first repository, and performing your first Git operations.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
+
+- **Node.js** v22 or higher
+- **pnpm** v10.19.0 or higher
+- **Cloudflare account** (free tier works fine)
+- **Git** installed on your machine
+
+## Step 1: Set up your account
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone Gitflare to your local machine:
+    
+    ```bash
+    git clone https://github.com/mdhruvil/gitflare.git
+    cd gitflare
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    Install all required dependencies using pnpm:
+    
+    ```bash
+    pnpm install
+    ```
+    
+    <Note>
+      Gitflare uses pnpm workspaces to manage the monorepo structure.
+    </Note>
+  </Step>
+  
+  <Step title="Configure environment variables">
+    Navigate to the web app directory and set up your environment:
+    
+    ```bash
+    cd apps/web
+    ```
+    
+    Create a `.dev.vars` file with the following:
+    
+    ```bash
+    SITE_URL=http://localhost:3000
+    ```
+    
+    For production deployment, you'll also need to set these secrets in your Cloudflare dashboard or via wrangler.
+  </Step>
+  
+  <Step title="Set up the database">
+    Initialize the local D1 database:
+    
+    ```bash
+    pnpm db:migrate:local
+    ```
+    
+    This creates the SQLite database schema for users, repositories, and issues.
+  </Step>
+  
+  <Step title="Start the development server">
+    Launch the local development server:
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    Open [http://localhost:3000](http://localhost:3000) in your browser. You should see the Gitflare homepage!
+  </Step>
+  
+  <Step title="Create your account">
+    Click **Sign up** and create your account with:
+    - Username (this will be your repository owner name)
+    - Email address
+    - Password
+    
+    <Warning>
+      Choose your username carefully - it will be part of all your repository URLs.
+    </Warning>
+  </Step>
+</Steps>
+
+## Step 2: Create your first repository
+
+<Steps>
+  <Step title="Navigate to the new repository page">
+    After signing in, click **New repository** or navigate to the repositories page.
+  </Step>
+  
+  <Step title="Configure your repository">
+    Fill in the repository details:
+    
+    ```typescript
+    {
+      name: "my-first-repo",           // Letters, numbers, hyphens, underscores
+      description: "My first Gitflare repository",
+      isPrivate: false                  // Public or private
+    }
+    ```
+    
+    <Note>
+      Repository names must:
+      - Be 1-100 characters long
+      - Contain only letters, numbers, hyphens, and underscores
+      - Not end with `.git`
+    </Note>
+  </Step>
+  
+  <Step title="Create the repository">
+    Click **Create repository**. Gitflare will:
+    
+    1. Create a new repository entry in the D1 database
+    2. Initialize a new Durable Object for the repository
+    3. Set up an empty bare Git repository
+    
+    From the source code (`apps/web/src/api/repos.ts:117-118`):
+    
+    ```typescript
+    const stub = getRepoDOStub(fullName);
+    await stub.ensureRepoInitialized();
+    ```
+  </Step>
+</Steps>
+
+## Step 3: Perform your first Git operations
+
+Now that your repository is created, let's perform some Git operations!
+
+<Steps>
+  <Step title="Generate a personal access token">
+    To push to your repository, you need a personal access token (PAT):
+    
+    1. Navigate to **Settings** > **Personal Access Tokens**
+    2. Click **Generate new token**
+    3. Give it a descriptive name like `my-laptop`
+    4. Copy the token immediately (you won't see it again!)
+    
+    <Warning>
+      Store your PAT securely. Anyone with this token can push to your repositories.
+    </Warning>
+  </Step>
+  
+  <Step title="Clone your repository">
+    Clone your newly created repository:
+    
+    ```bash
+    git clone http://localhost:3000/username/my-first-repo.git
+    cd my-first-repo
+    ```
+    
+    <Note>
+      For public repositories, you can clone without authentication. Private repositories require a PAT.
+    </Note>
+  </Step>
+  
+  <Step title="Add some content">
+    Create a README file and make your first commit:
+    
+    ```bash
+    echo "# My First Repo" > README.md
+    git add README.md
+    git commit -m "Initial commit"
+    ```
+  </Step>
+  
+  <Step title="Push to Gitflare">
+    Push your changes to Gitflare:
+    
+    ```bash
+    git push origin main
+    ```
+    
+    When prompted for credentials:
+    - **Username**: Your Gitflare username
+    - **Password**: Your personal access token
+    
+    <CodeGroup>
+    ```bash Git credential helper
+    # Store credentials to avoid repeated prompts
+    git config credential.helper store
+    ```
+    
+    ```bash Push with credentials
+    # Or include credentials in the URL (less secure)
+    git push http://username:YOUR_TOKEN@localhost:3000/username/my-first-repo.git main
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Verify in the web interface">
+    Navigate to your repository in the web browser at:
+    
+    ```
+    http://localhost:3000/username/my-first-repo
+    ```
+    
+    You should see:
+    - Your README.md file
+    - The commit you just pushed
+    - The repository tree structure
+  </Step>
+</Steps>
+
+## How it works
+
+Here's what happens during Git operations:
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Accordion title="git clone / git pull (git-upload-pack)" icon="download">
+    When you clone or pull from a Gitflare repository:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+    1. **Discovery**: Git sends a request to `/username/repo/info/refs?service=git-upload-pack`
+    2. **Authentication**: Gitflare verifies your credentials (from `apps/web/src/lib/git-auth.ts:19-27`):
+       - Public repos: Allow anonymous read access
+       - Private repos: Require valid PAT from repository owner
+    3. **Capability advertisement**: Gitflare advertises supported Git capabilities
+    4. **Negotiation**: Git client sends "want" and "have" refs to determine what objects to fetch
+    5. **Pack creation**: Gitflare's Durable Object collects the requested objects (from `apps/web/src/git/service.ts:214-295`)
+    6. **Transfer**: Objects are packed and sent to the client
+    
+    ```typescript
+    async collectObjectsForPack(wants: string[], haves: string[]): Promise<string[]> {
+      const objectsToSend = new Set<string>();
+      const visited = new Set<string>();
+      const haveSet = new Set(haves);
+      
+      // BFS traversal of commit graph to collect all needed objects
+      // ... traverses commits, trees, and blobs
+      
+      return Array.from(objectsToSend);
+    }
+    ```
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+  
+  <Accordion title="git push (git-receive-pack)" icon="upload">
+    When you push to a Gitflare repository:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    1. **Discovery**: Git sends a request to `/username/repo/info/refs?service=git-receive-pack`
+    2. **Authentication**: Gitflare verifies push permissions (from `apps/web/src/lib/git-auth.ts:58-63`):
+       - Push operations always require authentication
+       - Only the repository owner can push
+    3. **Pack reception**: Git client sends a packfile with new objects
+    4. **Index pack**: Gitflare indexes the packfile into the Durable Object storage (from `apps/web/src/git/service.ts:204-212`)
+    5. **Reference updates**: Gitflare updates branch references (from `apps/web/src/git/service.ts:599-738`):
+       - Validates old OID matches current reference
+       - Ensures fast-forward updates (no force push)
+       - Atomically updates all references
+    
+    ```typescript
+    await git.indexPack({
+      fs: this.fs,
+      dir: this.gitdir,
+      gitdir: this.gitdir,
+      filepath: filePath,
+      cache: this.cache,
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Repository storage" icon="database">
+    Each repository in Gitflare has:
+    
+    - **Durable Object**: Stores the actual Git repository data
+      - Git objects (blobs, trees, commits, tags)
+      - References (branches, tags)
+      - Packfiles
+      - Virtualized file system on Durable Object SQLite
+    
+    - **D1 Record**: Stores metadata (from `apps/web/src/api/repos.ts:103-120`):
+      - Repository name and description
+      - Owner information
+      - Public/private status
+      - Creation timestamp
+    
+    ```typescript
+    const result = await Repo.create({
+      name: data.name,
+      description: data.description.trim() || undefined,
+      isPrivate: data.isPrivate,
+      ownerId: user.id,
+      owner: user.username,
+    });
+    ```
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## Deploy to production
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+Ready to deploy Gitflare to production?
+
+<Steps>
+  <Step title="Create a Cloudflare account">
+    If you haven't already, sign up for a [Cloudflare account](https://dash.cloudflare.com/sign-up).
+  </Step>
+  
+  <Step title="Configure production environment">
+    Set up your production environment variables via wrangler:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    wrangler secret put SITE_URL
+    # Enter your production URL, e.g., https://git.yourdomain.com
+    ```
+  </Step>
+  
+  <Step title="Create production database">
+    Create and migrate your production D1 database:
+    
+    ```bash
+    pnpm db:migrate:remote
+    ```
+  </Step>
+  
+  <Step title="Deploy to Cloudflare">
+    Deploy your Gitflare instance:
+    
+    ```bash
+    cd apps/web
+    pnpm deploy
+    ```
+    
+    Your Gitflare instance will be live on Cloudflare Workers!
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you have Gitflare running, explore more features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Managing repositories" icon="folder" href="/guides/creating-repositories">
+    Learn about repository settings and access control
+  </Card>
+  
+  <Card title="Git operations" icon="git" href="/guides/git-operations">
+    Deep dive into all supported Git commands
+  </Card>
+  
+  <Card title="Architecture" icon="building" href="/concepts/architecture">
+    Understand how Gitflare works under the hood
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/features/authentication">
+    Set up authentication and personal access tokens
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

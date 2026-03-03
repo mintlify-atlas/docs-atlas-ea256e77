@@ -1,0 +1,428 @@
+---
+title: git-receive-pack endpoint
+description: Push operations using the Git Smart HTTP Protocol
+---
+
+The git-receive-pack endpoint handles push operations, allowing Git clients to upload objects and update references in repositories. This endpoint implements Git Protocol Version 1.
+
+## Endpoint
+
+```
+POST /{owner}/{repo}/git-receive-pack
+```
+
+<ParamField path="owner" type="string" required>
+  Repository owner username or organization name
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  Repository name (with or without `.git` suffix)
+</ParamField>
+
+## Authentication
+
+This endpoint always requires HTTP Basic Authentication. Anonymous pushes are not permitted.
+
+```http
+Authorization: Basic base64(username:password)
+```
+
+Unauthenticated requests receive:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="Git"
+```
+
+## Request
+
+### Headers
+
+<ParamField header="Content-Type" type="string" default="application/x-git-receive-pack-request">
+  Content type for receive-pack requests
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  HTTP Basic Authentication credentials
+</ParamField>
+
+### Body
+
+The request body contains pkt-line encoded commands followed by a packfile:
+
+```
+<old-oid> <new-oid> <ref>\0<capabilities>
+<old-oid> <new-oid> <ref>
+...
+0000 (flush)
+<packfile data>
+```
+
+#### Command format
+
+Each command specifies a reference update:
+
+<ParamField body="old-oid" type="string" required>
+  Current object ID (SHA-1) of the reference, or `0000000000000000000000000000000000000000` for new refs
+</ParamField>
+
+<ParamField body="new-oid" type="string" required>
+  New object ID (SHA-1) to update the reference to, or `0000000000000000000000000000000000000000` to delete
+</ParamField>
+
+<ParamField body="ref" type="string" required>
+  Full reference name (e.g., `refs/heads/main`, `refs/tags/v1.0.0`)
+</ParamField>
+
+#### Capabilities
+
+The first command line includes capability declarations:
+
+<ParamField body="report-status" type="boolean">
+  Client requests detailed status report for each ref update
+</ParamField>
+
+<ParamField body="delete-refs" type="boolean">
+  Client supports deleting references
+</ParamField>
+
+<ParamField body="atomic" type="boolean">
+  Request atomic transaction (all updates succeed or all fail)
+</ParamField>
+
+<ParamField body="no-thin" type="boolean">
+  Client will not send thin packs
+</ParamField>
+
+#### Packfile
+
+After the flush packet, the request includes a packfile containing new objects:
+
+```
+PACK<version><object-count><objects><checksum>
+```
+
+The packfile is in Git's standard pack format and contains all objects needed for the reference updates.
+
+## Response
+
+### Success response
+
+<ResponseField name="status" type="number">
+  HTTP status code (200 for success)
+</ResponseField>
+
+<ResponseField name="Content-Type" type="string">
+  `application/x-git-receive-pack-result`
+</ResponseField>
+
+<ResponseField name="body" type="binary">
+  Pkt-line encoded status report
+</ResponseField>
+
+The response body contains a status report:
+
+```
+unpack ok
+ok <ref>
+ok <ref>
+...
+0000 (flush)
+```
+
+### Failure response
+
+If unpacking fails:
+
+```
+unpack <error-message>
+ng <ref> <error-reason>
+...
+0000 (flush)
+```
+
+Status lines:
+- `unpack ok`: Packfile was successfully unpacked
+- `unpack <error>`: Packfile unpacking failed
+- `ok <ref>`: Reference update succeeded
+- `ng <ref> <error>`: Reference update failed
+
+## Reference update types
+
+### Create reference
+
+Create a new branch or tag:
+
+```
+0000000000000000000000000000000000000000 abc123... refs/heads/feature
+```
+
+### Update reference
+
+Update an existing reference (must be fast-forward unless forced):
+
+```
+def456... abc123... refs/heads/main
+```
+
+### Delete reference
+
+Delete a branch or tag:
+
+```
+abc123... 0000000000000000000000000000000000000000 refs/heads/old-feature
+```
+
+## Validation rules
+
+The server validates each reference update:
+
+1. **Old OID match**: The specified old OID must match the current reference value
+2. **Fast-forward check**: Updates must be fast-forward (descendant of current commit)
+3. **Object existence**: New OID must exist after unpacking
+4. **Reference creation**: Cannot create a reference that already exists
+5. **Reference deletion**: Cannot delete a non-existent reference
+
+See `apps/web/src/git/service.ts:598` for the full validation logic.
+
+## Atomic transactions
+
+When the `atomic` capability is requested:
+
+- All reference updates are validated before any are applied
+- If any update fails validation, all updates are rejected
+- Server responds with failure status for all references
+
+Without atomic mode, successful updates are applied even if others fail.
+
+## Examples
+
+### Push new branch
+
+```bash
+curl -X POST https://gitflare.example.com/johndoe/myrepo/git-receive-pack \
+  -u "username:password" \
+  -H "Content-Type: application/x-git-receive-pack-request" \
+  --data-binary @- << EOF
+0088 0000000000000000000000000000000000000000 abc123def456... refs/heads/feature\0report-status atomic
+0000
+PACK...(binary packfile data)
+EOF
+```
+
+### Update main branch
+
+```bash
+curl -X POST https://gitflare.example.com/johndoe/myrepo/git-receive-pack \
+  -u "username:password" \
+  -H "Content-Type: application/x-git-receive-pack-request" \
+  --data-binary @- << EOF
+0088 def456abc123... 789abc012def... refs/heads/main\0report-status
+0000
+PACK...(binary packfile data)
+EOF
+```
+
+### Delete branch
+
+```bash
+curl -X POST https://gitflare.example.com/johndoe/myrepo/git-receive-pack \
+  -u "username:password" \
+  -H "Content-Type: application/x-git-receive-pack-request" \
+  --data-binary @- << EOF
+0088 abc123def456... 0000000000000000000000000000000000000000 refs/heads/old-feature\0report-status delete-refs
+0000
+EOF
+```
+
+## Implementation details
+
+The receive-pack endpoint is implemented across several components:
+
+### Route handler
+
+`apps/web/src/routes/$owner/$repo/git-receive-pack.ts:5`
+
+Handles authentication and forwards requests to the Durable Object:
+
+```typescript
+export const Route = createFileRoute("/$owner/$repo/git-receive-pack")({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        // Verify authentication (always required)
+        const isAuthorized = await verifyAuth({
+          owner,
+          repo: repoName,
+          req: request,
+          service: "receive-pack",
+        });
+
+        // Forward to Durable Object
+        return stub.fetch("https://do/git-receive-pack", {
+          method: "POST",
+          body: request.body,
+        });
+      },
+    },
+  },
+});
+```
+
+### Durable Object handler
+
+`apps/web/src/do/repo.ts:95`
+
+Processes the request within the repository Durable Object:
+
+```typescript
+if (pathname === "/git-receive-pack" && request.method === "POST") {
+  const result = await this.receivePack(data);
+  return result;
+}
+```
+
+### Protocol implementation
+
+`apps/web/src/do/repo.ts:128`
+
+Handles packfile and reference updates:
+
+```typescript
+async receivePack(data: Uint8Array) {
+  const { commands, packfile, capabilities } = parseReceivePackRequest(data);
+
+  // Write packfile to storage
+  const packFilePath = `/repo/objects/pack/pack-${Date.now()}.pack`;
+  await this.isoGitFs.promises.writeFile(packFilePath, packfile);
+
+  // Index the packfile
+  try {
+    await this.git.indexPack(packFilePath.replace("/repo/", ""));
+  } catch (error) {
+    return buildReportStatus(
+      [
+        {
+          ref: "*",
+          ok: false,
+          error: `unpack failed: ${error.message}`,
+        },
+      ],
+      false
+    );
+  }
+
+  // Apply reference updates
+  const atomic = capabilities.includes("atomic");
+  const results = await this.git.applyRefUpdates(commands, atomic);
+
+  return buildReportStatus(results, true);
+}
+```
+
+### Core protocol functions
+
+The protocol implementation uses these key functions:
+
+- `parseReceivePackRequest()`: Extract commands, capabilities, and packfile (`apps/web/src/git/protocol.ts:90`)
+- `buildReportStatus()`: Build status report response (`apps/web/src/git/protocol.ts:139`)
+
+### Git operations
+
+`apps/web/src/git/service.ts`
+
+Provides Git operations using isomorphic-git:
+
+- `indexPack()`: Index packfile and add objects to repository (`service.ts:204`)
+- `applyRefUpdates()`: Validate and apply reference updates (`service.ts:598`)
+
+### Command structure
+
+`apps/web/src/git/protocol.ts:84`
+
+Commands are parsed into this structure:
+
+```typescript
+export type Command = {
+  oldOid: string;
+  newOid: string;
+  ref: string;
+};
+```
+
+### Result structure
+
+`apps/web/src/git/service.ts:7`
+
+Each reference update produces a result:
+
+```typescript
+export type RefUpdateResult = {
+  ref: string;
+  ok: boolean;
+  error?: string;
+};
+```
+
+## Error responses
+
+### Unauthorized access
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="Git"
+
+Unauthorized
+```
+
+### Packfile unpack failure
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/x-git-receive-pack-result
+
+unpack Failed to index packfile: <error>
+```
+
+### Reference update failures
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/x-git-receive-pack-result
+
+unpack ok
+ng refs/heads/main non-fast-forward update rejected
+ng refs/heads/feature ref already exists
+0000
+```
+
+### Atomic transaction failure
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/x-git-receive-pack-result
+
+unpack ok
+ng refs/heads/main atomic transaction failed
+ng refs/heads/feature atomic transaction failed
+0000
+```
+
+## Common error reasons
+
+- `old OID mismatch`: The reference has been updated by another push
+- `ref already exists`: Attempted to create an existing reference
+- `ref doesn't exist`: Attempted to update or delete a non-existent reference
+- `non-fast-forward update rejected`: Update is not a descendant of current commit
+- `atomic transaction failed`: One or more updates in atomic transaction failed
+- `unpack failed`: Packfile could not be parsed or indexed
+
+## Related endpoints
+
+<Card title="Git Protocol Overview" icon="book" href="/api/git-protocol">
+  Learn about the Git Smart HTTP Protocol implementation
+</Card>
+
+<Card title="git-upload-pack" icon="download" href="/api/git-upload-pack">
+  Fetch and pull operations endpoint
+</Card>

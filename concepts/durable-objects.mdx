@@ -1,0 +1,382 @@
+---
+title: Durable Objects
+description: How Gitflare uses Cloudflare Durable Objects for stateful repository storage
+---
+
+Durable Objects are the core storage primitive in Gitflare, providing stateful, strongly consistent storage for Git repositories. Each repository gets its own Durable Object instance with dedicated SQLite storage.
+
+## What are Durable Objects?
+
+Cloudflare Durable Objects are:
+
+- **Stateful**: Maintain state across multiple requests
+- **Strongly consistent**: All requests to a single instance are serialized
+- **Globally unique**: Each instance is identified by a unique ID or name
+- **Persistent**: Data survives across restarts and migrations
+- **Edge-hosted**: Run on Cloudflare's global network like Workers
+
+Unlike traditional serverless functions that are stateless, Durable Objects can maintain state in memory and persist it to SQLite storage.
+
+## One Durable Object per repository
+
+Gitflare creates a Durable Object for each repository, identified by the full repository name (e.g., `username/repo`):
+
+```typescript
+export function getRepoDOStub(fullRepoName: string) {
+  const stub = (env.REPO as DurableObjectNamespace<RepoBase>).getByName(
+    fullRepoName
+  );
+  stub.setFullName(fullRepoName);
+  return stub;
+}
+```
+
+This design provides:
+
+**Isolation**: Each repository has dedicated resources and storage
+
+**Consistency**: All operations for a repository are serialized through one instance
+
+**Scalability**: Adding repositories doesn't affect existing ones
+
+**Simplicity**: No need for distributed locking or consensus protocols
+
+<Note>
+Cloudflare automatically handles the creation, migration, and location of Durable Objects. You just call `getByName()` and the platform takes care of the rest.
+</Note>
+
+## Durable Object lifecycle
+
+The repository Durable Object is initialized in `apps/web/src/do/repo.ts:46-62`:
+
+```typescript
+class RepoBase extends DurableObject<Env> {
+  private readonly dofs: Fs;
+  private readonly isoGitFs: ReturnType<IsoGitFs["getPromiseFsClient"]>;
+  private readonly git: GitService;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+
+    // Initialize DOFS with 512KB chunk size
+    this.dofs = new Fs(ctx, env, { chunkSize: 512 * 1024 });
+
+    // Create isomorphic-git compatible filesystem adapter
+    this.isoGitFs = new IsoGitFs(this.dofs).getPromiseFsClient();
+    
+    // Initialize Git service with filesystem
+    this.git = new GitService(this.isoGitFs, "/repo");
+
+    // Block until initialization completes
+    this.ctx.blockConcurrencyWhile(async () => {
+      // Set device size to 5GB to support large repos
+      this.dofs.setDeviceSize(5 * 1024 * 1024 * 1024);
+      
+      // Initialize empty Git repository if needed
+      await this.ensureRepoInitialized();
+      
+      // Restore repository name from storage
+      const storedFullName = await this.typedStorage.get("fullName");
+      if (storedFullName && !this._fullName) {
+        this._fullName = storedFullName;
+      }
+    });
+  }
+}
+```
+
+### Initialization steps
+
+1. **DOFS setup**: Create virtualized file system with SQLite backend
+2. **Filesystem adapter**: Wrap DOFS to provide Node.js-like fs API
+3. **Git service**: Initialize isomorphic-git with the filesystem
+4. **Device size**: Configure 5GB storage capacity
+5. **Repository init**: Create Git repository structure if it doesn't exist
+6. **Metadata restore**: Load repository name from persistent storage
+
+<Info>
+`blockConcurrencyWhile()` ensures initialization completes before any requests are processed, preventing race conditions.
+</Info>
+
+## Request handling
+
+The Durable Object exposes a `fetch()` method that handles incoming requests:
+
+```typescript
+async fetch(request: Request) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  const data = new Uint8Array(await request.arrayBuffer());
+
+  if (pathname === "/git-receive-pack" && request.method === "POST") {
+    return await this.receivePack(data);
+  }
+
+  if (pathname === "/git-upload-pack" && request.method === "POST") {
+    return await this.uploadPack(data);
+  }
+
+  return new Response("Not Found", { status: 404 });
+}
+```
+
+This routes Git protocol requests to the appropriate handlers:
+
+- `receivePack()`: Handles `git push`
+- `uploadPack()`: Handles `git fetch`, `git pull`, `git clone`
+
+Additional methods provide data for the web UI:
+
+- `getCommits()`: Returns commit history
+- `getTree()`: Returns directory listings
+- `getBlob()`: Returns file contents
+- `getBranches()`: Returns branch list
+
+## Storage architecture
+
+The Durable Object uses layered storage:
+
+```
+┌─────────────────────────────────────────┐
+│        Git Service (isomorphic-git)     │
+│                                         │
+│  • Git operations (commit, branch, etc) │
+│  • Object graph traversal               │
+│  • Packfile generation                  │
+└─────────────────┬───────────────────────┘
+                  │
+                  │ fs.promises API
+                  ▼
+┌─────────────────────────────────────────┐
+│    IsoGitFs (Filesystem Adapter)        │
+│                                         │
+│  • Translates fs calls to DOFS calls    │
+│  • Handles path normalization           │
+│  • Error code mapping                   │
+└─────────────────┬───────────────────────┘
+                  │
+                  │ DOFS API
+                  ▼
+┌─────────────────────────────────────────┐
+│      DOFS (Durable Object FS)           │
+│                                         │
+│  • Virtual filesystem implementation    │
+│  • File chunking (512KB chunks)         │
+│  • Metadata management                  │
+└─────────────────┬───────────────────────┘
+                  │
+                  │ SQL
+                  ▼
+┌─────────────────────────────────────────┐
+│    Durable Object SQLite Storage        │
+│                                         │
+│  • Persistent, transactional storage    │
+│  • Automatically replicated             │
+│  • Up to 5GB per Durable Object         │
+└─────────────────────────────────────────┘
+```
+
+Each layer has a specific responsibility:
+
+**Git Service**: High-level Git operations using isomorphic-git
+
+**IsoGitFs**: Adapts DOFS to the Node.js fs.promises API that isomorphic-git expects
+
+**DOFS**: Provides POSIX-like filesystem operations backed by SQLite
+
+**SQLite Storage**: Cloudflare's persistent, transactional storage
+
+## State management
+
+The Durable Object maintains several types of state:
+
+### Persistent state (SQLite)
+
+Stored permanently using the Durable Object storage API:
+
+```typescript
+get typedStorage() {
+  return {
+    get: async <K extends keyof Storage>(key: K) =>
+      this.ctx.storage.get<Storage[K]>(key),
+    put: async <K extends keyof Storage>(key: K, value: Storage[K]) =>
+      this.ctx.storage.put(key, value),
+    delete: async <K extends keyof Storage>(key: K) =>
+      this.ctx.storage.delete(key),
+  };
+}
+
+async setFullName(fullName: string) {
+  if (this._fullName) return;
+  
+  this._fullName = fullName;
+  await this.typedStorage.put("fullName", fullName);
+}
+```
+
+This stores:
+- Repository metadata (name, settings)
+- Git objects (commits, trees, blobs, tags)
+- References (branches, tags)
+- Packfiles
+
+### In-memory state
+
+Held in RAM for the lifetime of the Durable Object instance:
+
+```typescript
+class GitService {
+  private readonly cache: object = {};
+
+  async readObject(oid: string) {
+    return await git.readObject({
+      fs: this.fs,
+      gitdir: this.gitdir,
+      oid,
+      cache: this.cache,  // In-memory cache
+    });
+  }
+}
+```
+
+Caching improves performance for:
+- Frequently accessed Git objects
+- Recent commits and trees
+- Branch tips
+
+<Note>
+In-memory cache is lost when the Durable Object is evicted or migrated, but this is transparent to clients—it just means a cache miss and reload from SQLite.
+</Note>
+
+## Concurrency model
+
+Durable Objects provide **single-threaded execution** for each instance:
+
+- All requests to the same Durable Object are serialized
+- No need for locks or mutexes within the Durable Object
+- Requests from different Durable Objects run in parallel
+
+This simplifies implementation significantly:
+
+```typescript
+async receivePack(data: Uint8Array) {
+  // No locking needed—this is the only request running
+  // for this repository at this moment
+  
+  const { commands, packfile } = parseReceivePackRequest(data);
+  
+  // Write packfile
+  await this.isoGitFs.promises.writeFile(packFilePath, packfile);
+  
+  // Index it
+  await this.git.indexPack(packFilePath);
+  
+  // Update refs
+  const results = await this.git.applyRefUpdates(commands, atomic);
+  
+  return buildReportStatus(results, true);
+}
+```
+
+You can write straightforward sequential code without worrying about race conditions.
+
+<Info>
+While execution is single-threaded, the Durable Object can process requests very quickly. For most repositories, this provides sufficient throughput.
+</Info>
+
+## Caching strategy
+
+The Durable Object implements a caching layer to avoid redundant Git operations:
+
+```typescript
+async getCommits(args: { ref?: string; depth?: number; filepath?: string }) {
+  const { ref, depth, filepath } = args;
+
+  const latestCommit = await this.getLatestCommit(ref);
+  if (!latestCommit) {
+    return [];
+  }
+
+  const commits = await cache.getOrSetJson({
+    key: `${this.fullName}/commits`,
+    fetcher: async () => await this.git.getLog(args),
+    params: {
+      ref,
+      depth: depth?.toString(),
+      filepath,
+      latestCommitOid: latestCommit.oid,  // Cache key includes commit
+    },
+  });
+  return commits;
+}
+```
+
+Cache invalidation is based on:
+- Latest commit OID (for commit history)
+- Resolved ref (for trees and blobs)
+- File path (for path-specific queries)
+
+This ensures cached data remains valid even as the repository changes.
+
+## Resource limits
+
+Cloudflare imposes some limits on Durable Objects:
+
+| Resource | Limit |
+|----------|-------|
+| Storage | 5 GB per Durable Object |
+| CPU time | 30 seconds per request |
+| Memory | 128 MB per instance |
+| Request size | 100 MB |
+
+Gitflare is designed to work within these limits:
+
+- **Storage**: 5GB is sufficient for most repositories. Very large repos might need multiple Durable Objects (future enhancement)
+- **CPU time**: Packfile generation is optimized to complete quickly
+- **Memory**: DOFS streams large files from SQLite rather than loading into memory
+- **Request size**: Large pushes might need to be split (handled by Git client automatically)
+
+<Note>
+For repositories approaching the 5GB limit, you can implement a strategy to offload old packfiles to R2 (Cloudflare's object storage) while keeping recent objects in the Durable Object.
+</Note>
+
+## Monitoring and debugging
+
+The Durable Object includes logging for observability:
+
+```typescript
+import { createLogger } from "./logger";
+
+const logger = createLogger("RepoDO");
+
+logger.info("(upload-pack-fetch) Packing ${objectsToPack.length} objects");
+logger.error("(receive-pack) Failed to index packfile: ", error);
+```
+
+Logs are sent to Cloudflare's logging service and can be viewed in the dashboard or streamed to external services.
+
+You can also expose debug endpoints:
+
+```typescript
+getDeviceStats() {
+  return this.dofs.getDeviceStats();
+}
+```
+
+This returns storage statistics like:
+- Total device size
+- Used space
+- Number of files
+- Number of directories
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Storage architecture" href="/concepts/storage" icon="hard-drive">
+    Deep dive into DOFS and the virtualized file system
+  </Card>
+  <Card title="Serverless Git" href="/concepts/serverless-git" icon="git">
+    Learn how Git operations work without servers
+  </Card>
+</CardGroup>

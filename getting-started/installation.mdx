@@ -1,0 +1,127 @@
+---
+title: "Installation"
+description: "Set up your development environment to run Gitflare locally"
+---
+
+<Info>
+  **Prerequisites**:
+  - Node.js version 22 or higher
+  - pnpm version 10.19.0 or higher
+  - A Cloudflare account (free tier works)
+</Info>
+
+Gitflare is a self-hosted Git hosting platform built to run on Cloudflare's serverless infrastructure. Follow these steps to set up your local development environment.
+
+<Steps>
+<Step title="Install Node.js">
+
+Ensure you have Node.js v22 or higher installed on your system. You can verify your Node.js version by running:
+
+```bash
+node --version
+```
+
+If you need to install or upgrade Node.js, download it from [nodejs.org](https://nodejs.org/) or use a version manager like [nvm](https://github.com/nvm-sh/nvm).
+
+</Step>
+
+<Step title="Install pnpm">
+
+Gitflare uses pnpm for package management and workspace support. Install pnpm globally:
+
+<CodeGroup>
+```bash npm
+npm install -g pnpm@10.19.0
+```
+
+```bash homebrew
+brew install pnpm
+```
+
+```bash curl
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+```
+</CodeGroup>
+
+Verify the installation:
+
+```bash
+pnpm --version
+```
+
+</Step>
+
+<Step title="Clone the repository">
+
+Clone the Gitflare repository to your local machine:
+
+```bash
+git clone https://github.com/yourusername/gitflare.git
+cd gitflare
+```
+
+</Step>
+
+<Step title="Install dependencies">
+
+Install all project dependencies using pnpm:
+
+```bash
+pnpm install
+```
+
+This command installs dependencies for all workspaces in the monorepo, including the web application and any packages.
+
+<Note>
+  The project uses pnpm workspaces with Turborepo for efficient monorepo management.
+</Note>
+
+</Step>
+
+<Step title="Set up Cloudflare account">
+
+You need a Cloudflare account to deploy Gitflare. If you don't have one:
+
+1. Visit [cloudflare.com](https://cloudflare.com) and sign up for a free account
+2. Note your Account ID from the Cloudflare dashboard
+3. You'll need this for deployment and database setup
+
+</Step>
+</Steps>
+
+## Verify installation
+
+To verify everything is set up correctly, run the type checker:
+
+```bash
+pnpm typecheck
+```
+
+If the command completes without errors, your installation is successful.
+
+## Project structure
+
+Gitflare is organized as a monorepo:
+
+```
+gitflare/
+├── apps/
+│   └── web/              # TanStack Start application
+│       ├── src/          # Application source code
+│       ├── migrations/   # Database migrations
+│       └── alchemy.run.ts # Alchemy deployment configuration
+├── packages/             # Shared packages (if any)
+└── package.json          # Root workspace configuration
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/getting-started/configuration">
+    Configure environment variables and Cloudflare services
+  </Card>
+  
+  <Card title="Deployment" icon="rocket" href="/getting-started/deployment">
+    Deploy Gitflare to Cloudflare Workers
+  </Card>
+</CardGroup>

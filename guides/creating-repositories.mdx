@@ -1,0 +1,144 @@
+---
+title: Creating repositories
+description: Learn how to create and manage repositories in Gitflare
+---
+
+Repositories in Gitflare contain all your project files and revision history. You can create both public and private repositories to organize your code.
+
+## Creating a new repository
+
+<Steps>
+  <Step title="Navigate to the new repository page">
+    Click on your profile menu and select **New Repository**, or navigate directly to `/new`.
+  </Step>
+
+  <Step title="Enter repository details">
+    Fill in the repository information:
+    
+    - **Repository name**: Enter a name for your repository (e.g., `my-awesome-project`)
+      - Only letters, numbers, hyphens, and underscores are allowed
+      - Name cannot end with `.git`
+      - Maximum 100 characters
+      - Spaces will automatically be converted to hyphens
+    
+    - **Description** (optional): Add a brief description of your project (up to 500 characters)
+  </Step>
+
+  <Step title="Choose visibility">
+    Select the repository visibility:
+    
+    - **Public**: Anyone can see this repository
+    - **Private**: Only you can see this repository
+    
+    <Note>
+      Private repositories require a Personal Access Token (PAT) for all git operations, including cloning.
+    </Note>
+  </Step>
+
+  <Step title="Create the repository">
+    Click the **Create** button to create your repository. You'll be automatically redirected to your new repository page.
+  </Step>
+</Steps>
+
+## Repository name requirements
+
+When creating a repository, your name must follow these rules:
+
+- Minimum 1 character, maximum 100 characters
+- Can only contain:
+  - Letters (a-z, A-Z)
+  - Numbers (0-9)
+  - Hyphens (-)
+  - Underscores (_)
+- Cannot end with `.git`
+
+<Tip>
+  Repository names are automatically formatted as you type. Spaces are converted to hyphens, and invalid characters are removed.
+</Tip>
+
+## Initial setup
+
+After creating a repository, you'll see instructions for pushing your code. There are two main approaches:
+
+### Creating a new repository on the command line
+
+If you're starting from scratch:
+
+```bash
+echo "# my-repo" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://your-domain.com/username/my-repo.git
+git push -u origin main
+```
+
+### Pushing an existing repository
+
+If you already have a Git repository:
+
+```bash
+git remote add origin https://your-domain.com/username/my-repo.git
+git branch -M main
+git push -u origin main
+```
+
+<Note>
+  You'll need a Personal Access Token to push changes. Create one in **Settings > Personal Access Tokens**.
+</Note>
+
+## Managing repository settings
+
+You can update your repository settings at any time by navigating to the repository's **Settings** tab.
+
+<Steps>
+  <Step title="Navigate to repository settings">
+    Go to your repository and click on the **Settings** tab in the navigation menu.
+  </Step>
+
+  <Step title="Update repository details">
+    You can modify:
+    
+    - **Description**: Update or add a description for your repository
+    - **Visibility**: Change between public and private
+    
+    <Note>
+      The repository name cannot be changed after creation.
+    </Note>
+  </Step>
+
+  <Step title="Save changes">
+    Click **Save changes** to apply your updates. The button is only enabled when you've made changes.
+  </Step>
+</Steps>
+
+## Repository visibility
+
+### Public repositories
+
+- Anyone can view the repository contents
+- Visible in your profile's repository list
+- Can be cloned without authentication
+- Requires a Personal Access Token for push operations
+
+### Private repositories
+
+- Only you can view the repository
+- Not visible to other users
+- Requires a Personal Access Token for all operations (clone, pull, push)
+
+<Tip>
+  You can change repository visibility at any time in the repository settings.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Git operations" icon="code-branch" href="/guides/git-operations">
+    Learn how to clone, push, and pull from your repositories
+  </Card>
+  <Card title="Managing issues" icon="circle-dot" href="/guides/managing-issues">
+    Track bugs and feature requests with issues
+  </Card>
+</CardGroup>

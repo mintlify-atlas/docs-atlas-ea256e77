@@ -1,0 +1,313 @@
+---
+title: Web interface
+description: Navigate Gitflare's modern web interface built with React, TanStack Router, and Tailwind CSS
+---
+
+Gitflare provides a responsive web interface built with modern web technologies, offering an intuitive experience for managing repositories, issues, and account settings.
+
+## Technology stack
+
+The web interface is powered by:
+
+<CardGroup cols={2}>
+  <Card title="React 19" icon="react">
+    Latest React features for optimal performance and user experience
+  </Card>
+  <Card title="TanStack Start" icon="rocket">
+    Full-stack React framework with server functions and streaming SSR
+  </Card>
+  <Card title="TanStack Router" icon="route">
+    Type-safe file-based routing with automatic code splitting
+  </Card>
+  <Card title="Tailwind CSS" icon="palette">
+    Utility-first CSS framework for responsive design
+  </Card>
+  <Card title="shadcn/ui" icon="box">
+    Beautiful, accessible UI components built on Radix UI
+  </Card>
+  <Card title="Cloudflare Workers" icon="cloud">
+    Edge-deployed web application for global low latency
+  </Card>
+</CardGroup>
+
+## Navigation structure
+
+Gitflare's routing is organized into several key sections:
+
+### Public routes
+
+- `/` - Landing page
+- `/login` - Sign in page with email/password form
+- `/signup` - Account creation page
+
+### Authenticated routes
+
+All routes under `/_layout` require authentication:
+
+- `/dashboard` - User dashboard showing personalized content
+- `/new` - Repository creation form
+- `/settings` - Account settings and Personal Access Tokens
+- `/$owner` - User profile showing their repositories
+
+### Repository routes
+
+Repository pages are nested under `/$owner/$repo/`:
+
+- `/$owner/$repo` - Repository overview with file tree and README
+- `/$owner/$repo/tree` - Directory browser for navigating folders
+- `/$owner/$repo/blob` - File viewer for displaying file contents
+- `/$owner/$repo/commits` - Commit history timeline
+- `/$owner/$repo/commits/$commitId` - Individual commit details
+- `/$owner/$repo/issues` - Issue tracker list view
+- `/$owner/$repo/issues/new` - Create new issue form
+- `/$owner/$repo/issues/$issueNumber` - Individual issue view
+- `/$owner/$repo/settings` - Repository configuration (owner only)
+
+## Dashboard
+
+The dashboard at `/dashboard` serves as the main landing page after login. Currently displays a welcome message with the user's username.
+
+### Future dashboard features
+
+The dashboard structure supports adding:
+- Recent repository activity
+- List of your repositories
+- Recent issues and pull requests
+- Activity feed from followed users
+
+## Repository interface
+
+### File tree view
+
+The repository homepage displays a three-column file tree:
+
+1. **File/Directory name** - With appropriate icons
+2. **Last commit message** - Truncated to first line
+3. **Relative timestamp** - Shows how long ago the file was modified
+
+Directories are sorted first, followed by files alphabetically.
+
+### Branch selector
+
+Switch between branches using a dropdown component that:
+- Shows the currently selected branch
+- Lists all available branches
+- Updates the view without full page reload
+- Preserves the current path when switching branches
+
+The branch is tracked via the `ref` query parameter in the URL.
+
+### Clone dialog
+
+Click the "Code" button to access the clone dialog, which:
+- Displays the HTTPS clone URL
+- Provides one-click copy to clipboard
+- Shows success feedback when copied
+- Includes usage instructions for Git
+
+### README rendering
+
+README files are automatically detected and rendered with:
+- **GitHub Flavored Markdown**: Tables, task lists, strikethrough, and more
+- **Raw HTML support**: Embedded HTML in Markdown files
+- **Syntax highlighting**: Code blocks with language detection
+- **Custom components**: Enhanced markdown elements via `react-markdown`
+
+## File and directory browsing
+
+### Directory view (`/tree`)
+
+Navigating into directories shows:
+- Breadcrumb navigation to parent directories
+- File tree for the current directory
+- Subdirectory navigation
+- File preview options
+
+### File view (`/blob`)
+
+Viewing individual files displays:
+- File path and name
+- Raw file contents
+- Branch/commit reference
+- Option to view raw file
+
+Binary files are detected and handled appropriately.
+
+## Commit history
+
+The commits page at `/$owner/$repo/commits` shows:
+- Chronological list of all commits
+- Commit messages and SHAs
+- Author information
+- Timestamps with relative formatting ("2 days ago")
+
+Click any commit to see:
+- Full commit details
+- File changes and diffs
+- Commit metadata
+
+## Issue tracker interface
+
+### Issue list
+
+The issues page provides:
+- Scannable list of all issues
+- Issue numbers, titles, and metadata
+- Creator and creation time
+- "New Issue" button in the header
+- Empty state with call-to-action
+
+### Issue creation form
+
+A focused form with:
+- Title input field with validation
+- Multi-line description textarea
+- Cancel and Create buttons
+- Error handling and success notifications
+
+### Issue detail view
+
+Individual issue pages show:
+- Full title and description
+- Status badge (open/closed)
+- Creator and timestamps
+- Issue metadata and number
+
+## Settings pages
+
+The settings interface at `/settings` uses tabs to organize:
+
+### Profile tab
+
+- Avatar display with auto-generated Dicebear image
+- Display name editor
+- Read-only username field
+- Read-only email field
+- Save button with loading state
+
+### Personal Access Tokens tab
+
+- List of all active tokens
+- Token creation dialog
+- Token metadata (name, created date, last used)
+- Delete buttons for each token
+- Copy functionality for newly created tokens
+
+## UI components
+
+Gitflare uses shadcn/ui components throughout:
+
+<CardGroup cols={3}>
+  <Card title="Forms" icon="pencil">
+    Input, Textarea, Label, Form validation with React Hook Form
+  </Card>
+  <Card title="Feedback" icon="bell">
+    Toast notifications, Alert boxes, Loading states
+  </Card>
+  <Card title="Navigation" icon="bars">
+    Breadcrumbs, Tabs, Buttons, Links with TanStack Router
+  </Card>
+  <Card title="Layout" icon="layout">
+    Cards, Dialogs, Popovers, Skeletons for loading
+  </Card>
+  <Card title="Data display" icon="table">
+    Avatar, Badge, Skeleton, formatted timestamps
+  </Card>
+  <Card title="Icons" icon="star">
+    Lucide React icons throughout the interface
+  </Card>
+</CardGroup>
+
+## Responsive design
+
+The interface adapts to different screen sizes:
+- Mobile-optimized forms and navigation
+- Responsive grid layouts
+- Touch-friendly button sizes
+- Collapsible navigation on small screens
+- Optimized file tree for narrow viewports
+
+## Loading states
+
+Gitflare provides smooth loading experiences:
+
+- **Skeleton screens**: Placeholder content while data loads
+- **Pending components**: Specialized loading states for each route
+- **Suspense boundaries**: React Suspense for async data
+- **Loading indicators**: Spinners on buttons and actions
+
+## Error handling
+
+The interface handles errors gracefully:
+
+- **404 pages**: Custom not found components for missing routes
+- **Error boundaries**: Catch and display component errors
+- **Toast notifications**: User-friendly error messages
+- **Form validation**: Inline validation with clear error messages
+- **Alert components**: Persistent error displays when needed
+
+## Data fetching
+
+Gitflare uses TanStack Query for data management:
+
+- **Suspense queries**: `useSuspenseQuery` for route data
+- **Mutations**: Form submissions and data updates
+- **Query options**: Shared query definitions across components
+- **Server functions**: Type-safe API calls with TanStack Start
+- **Automatic refetching**: Updates after mutations
+
+## Performance optimizations
+
+<CardGroup cols={2}>
+  <Card title="Code splitting" icon="scissors">
+    Automatic route-based code splitting with TanStack Router
+  </Card>
+  <Card title="Streaming SSR" icon="stream">
+    Server-side rendering with streaming for faster perceived load
+  </Card>
+  <Card title="Edge deployment" icon="globe">
+    Deployed on Cloudflare Workers for low latency worldwide
+  </Card>
+  <Card title="Optimistic updates" icon="zap">
+    Immediate UI feedback before server confirmation
+  </Card>
+</CardGroup>
+
+## Form handling
+
+Forms throughout Gitflare use:
+
+- **TanStack Form**: Type-safe form state management
+- **Zod validation**: Schema-based validation
+- **Real-time feedback**: Validation errors as you type
+- **Loading states**: Disabled inputs during submission
+- **Success notifications**: Toast messages on successful actions
+
+## Theme and styling
+
+The interface uses:
+
+- **Tailwind CSS**: Utility classes for styling
+- **CSS variables**: Dynamic theming support
+- **Dark mode ready**: Theme structure supports dark mode
+- **Custom components**: Extended Tailwind with custom classes
+- **Consistent spacing**: Standardized padding and margins
+
+## Accessibility
+
+Gitflare's interface follows accessibility best practices:
+
+- Semantic HTML elements
+- ARIA labels on interactive elements
+- Keyboard navigation support
+- Focus indicators on interactive elements
+- Screen reader-friendly component structure
+
+## Empty states
+
+When content is absent, Gitflare shows helpful empty states:
+
+- **Empty repositories**: Setup instructions with git commands
+- **No issues**: Prompt to create the first issue
+- **No tokens**: Explanation and creation button
+- **No commits**: Helpful guidance for initial push

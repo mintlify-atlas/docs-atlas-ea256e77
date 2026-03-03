@@ -1,0 +1,128 @@
+---
+title: Project structure
+description: Understanding the Gitflare codebase organization and architecture
+---
+
+## Overview
+
+Gitflare is built as a pnpm workspace monorepo with Turborepo for task orchestration. The project structure is designed to separate concerns between the web application, Git protocol handling, and data storage.
+
+## Repository layout
+
+```
+gitflare/
+├── apps/
+│   └── web/                    # TanStack Start app on Cloudflare Workers
+├── .github/                    # GitHub workflows and configuration
+├── screenshots/                # Project screenshots
+├── biome.json                  # Biome linter configuration
+├── turbo.json                  # Turborepo configuration
+├── pnpm-workspace.yaml         # pnpm workspace configuration
+└── package.json                # Root package.json with workspace scripts
+```
+
+## Web app structure
+
+The `apps/web` directory contains the main TanStack Start application:
+
+```
+apps/web/
+├── src/
+│   ├── api/                    # API route handlers
+│   ├── components/             # React components
+│   │   └── ui/                 # shadcn/ui components
+│   ├── db/                     # Database layer
+│   │   └── schema/             # Drizzle ORM schema definitions
+│   ├── do/                     # Durable Objects implementations
+│   ├── git/                    # Git protocol implementation
+│   ├── lib/                    # Utility functions and helpers
+│   └── routes/                 # TanStack Router routes
+│       ├── $owner/             # Owner-scoped routes (user/org pages)
+│       ├── _layout/            # Layout routes
+│       └── api/                # API endpoints
+├── migrations/                 # Drizzle database migrations
+├── public/                     # Static assets
+├── alchemy.run.ts              # Alchemy entry point for Workers
+├── drizzle.config.ts           # Drizzle ORM configuration
+├── vite.config.ts              # Vite configuration
+└── package.json                # Web app dependencies and scripts
+```
+
+## Key directories
+
+### `/src/api`
+Contains API route handlers for the web application.
+
+### `/src/components`
+React components for the web interface. The `ui/` subdirectory contains shadcn/ui components.
+
+### `/src/db`
+Database layer with Drizzle ORM schema definitions. This is where user data, repository metadata, issues, and pull requests are defined.
+
+### `/src/do`
+Cloudflare Durable Objects implementations. Each repository gets its own Durable Object instance with a virtualized file system built on SQLite.
+
+### `/src/git`
+Git Smart HTTP protocol implementation, including:
+- git-upload-pack (fetch/pull)
+- git-receive-pack (push)
+- Pkt-line protocol parsing
+- Packfile creation and transfer
+
+### `/src/lib`
+Utility functions, helpers, and shared code.
+
+### `/src/routes`
+TanStack Router routes for both web UI and API endpoints. Routes are file-based, with special prefixes like `$` for dynamic parameters and `_` for layout routes.
+
+## Configuration files
+
+### `biome.json`
+Configures Biome linting and formatting using the Ultracite preset. Defines code style rules, ignore patterns, and project-specific overrides.
+
+### `turbo.json`
+Defines Turborepo tasks like `build`, `dev`, `test`, and `typecheck` with caching and dependency configurations.
+
+### `pnpm-workspace.yaml`
+Defines the pnpm workspace structure, including `apps/*` and `packages/*` (when added).
+
+### `drizzle.config.ts`
+Configures Drizzle ORM for database migrations and schema management.
+
+### `vite.config.ts`
+Configures Vite for building and bundling the TanStack Start application.
+
+### `alchemy.run.ts`
+Entry point for the Alchemy development server, which provides local Cloudflare Workers emulation.
+
+## Tech stack
+
+- **Monorepo**: pnpm workspaces with Turborepo
+- **Frontend**: React 19, TanStack Router, TanStack Query, Vite, Tailwind CSS
+- **Runtime**: Cloudflare Workers
+- **Data Storage**: Cloudflare D1 (metadata), Durable Objects (Git repositories)
+- **Auth**: Better Auth with Cloudflare D1 integration
+- **Linting**: Biome via Ultracite preset
+- **ORM**: Drizzle with Cloudflare D1
+- **UI Components**: shadcn/ui with Radix UI primitives
+
+## Architecture
+
+Gitflare uses a serverless architecture:
+
+1. **Cloudflare Workers** - Runs the TanStack Start application at the edge
+2. **Durable Objects** - Each repository has its own Durable Object with a virtualized file system built on SQLite
+3. **Cloudflare D1** - Stores user accounts, repository metadata, issues, and pull requests
+4. **Better Auth** - Handles authentication and authorization
+
+When you push or pull from a repository:
+- Git clients connect via HTTPS to the Worker
+- The Worker implements the Git Smart HTTP protocol
+- Git objects are stored in the repository's Durable Object
+- Metadata updates are written to D1
+
+## Next steps
+
+- Review the [contribution guidelines](/development/contributing) to learn the development workflow
+- Read the [setup guide](/development/setup) to configure your development environment
+- Explore individual modules in the codebase to understand implementation details

@@ -1,0 +1,368 @@
+---
+title: Serverless Git
+description: How Git operations work in a serverless environment without traditional servers
+---
+
+Gitflare implements the full Git protocol in a serverless environment, enabling standard Git clients to interact with repositories without any traditional servers, VMs, or containers.
+
+## Git Smart HTTP protocol
+
+Git clients communicate with remote repositories using the Git Smart HTTP protocol, which consists of two main services:
+
+### git-upload-pack (fetch/pull/clone)
+
+This service handles read operations when you pull or clone repositories. The protocol flow:
+
+1. **Capability advertisement**: Server advertises supported features
+2. **Reference discovery**: Client requests available branches and tags
+3. **Negotiation**: Client and server exchange commit information to find common history
+4. **Packfile transfer**: Server sends only the objects client needs
+
+Implementation in `apps/web/src/do/repo.ts:157-217`:
+
+```typescript
+async uploadPack(data: Uint8Array) {
+  const { command, args } = parseCommand(data);
+
+  if (command === "ls-refs") {
+    const { refs, symbolicHead } = await this.git.listRefs();
+    return await buildLsRefsResponse(refs, args, symbolicHead);
+  }
+
+  if (command === "fetch") {
+    const fetchRequest = parseFetchRequest(data, args);
+    
+    // Find common commits between client and server
+    const commonCommits = await this.git.findCommonCommits(
+      fetchRequest.haves
+    );
+
+    // Collect objects reachable from wants but not from haves
+    const objectsToPack = await this.git.collectObjectsForPack(
+      fetchRequest.wants,
+      fetchRequest.haves
+    );
+
+    // Pack objects into binary format
+    const packfileData = await this.git.packObjects(objectsToPack);
+    
+    return await buildFetchResponse({
+      commonCommits,
+      packfileData,
+      noProgress: fetchRequest.capabilities.noProgress,
+      done: fetchRequest.done,
+    });
+  }
+}
+```
+
+### git-receive-pack (push)
+
+This service handles write operations when you push commits. The protocol flow:
+
+1. **Capability advertisement**: Server advertises supported push features (atomic, report-status, etc.)
+2. **Command submission**: Client sends ref update commands (create/update/delete branches)
+3. **Packfile upload**: Client sends new Git objects in a packfile
+4. **Processing**: Server indexes packfile and updates references
+5. **Status report**: Server reports success or failure for each ref update
+
+Implementation in `apps/web/src/do/repo.ts:128-155`:
+
+```typescript
+async receivePack(data: Uint8Array) {
+  const { commands, packfile, capabilities } = parseReceivePackRequest(data);
+
+  // Write packfile to storage
+  const packFilePath = `/repo/objects/pack/pack-${Date.now()}.pack`;
+  await this.isoGitFs.promises.writeFile(packFilePath, packfile);
+
+  try {
+    // Index packfile to extract objects
+    await this.git.indexPack(packFilePath.replace("/repo/", ""));
+  } catch (error) {
+    return buildReportStatus(
+      [{
+        ref: "*",
+        ok: false,
+        error: `unpack failed: ${(error as Error).message}`,
+      }],
+      false
+    );
+  }
+
+  // Apply ref updates (create/update/delete branches)
+  const atomic = capabilities.includes("atomic");
+  const results = await this.git.applyRefUpdates(commands, atomic);
+
+  return buildReportStatus(results, true);
+}
+```
+
+<Note>
+Gitflare implements Git protocol v2, which is more efficient than v1 by reducing round-trips and allowing clients to request only the information they need.
+</Note>
+
+## Pkt-line protocol
+
+The Git protocol uses a packet-line (pkt-line) format to frame messages. Each packet has a 4-byte hex length prefix followed by data:
+
+```
+0032git-upload-pack /repo.git\0host=example.com\0
+```
+
+Special packets:
+- `0000` - Flush packet (marks end of a section)
+- `0001` - Delimiter packet (separates sections in protocol v2)
+- `0002` - Response end packet
+
+The pkt-line implementation handles encoding and decoding:
+
+```typescript
+class PktLine {
+  static encode(data: string): Uint8Array {
+    const dataBytes = new TextEncoder().encode(data);
+    const length = dataBytes.length + 4;
+    const lengthHex = length.toString(16).padStart(4, "0");
+    const lengthBytes = new TextEncoder().encode(lengthHex);
+    
+    const packet = new Uint8Array(length);
+    packet.set(lengthBytes, 0);
+    packet.set(dataBytes, 4);
+    return packet;
+  }
+}
+```
+
+## Object collection and packfiles
+
+When a client requests commits, the server must determine which objects to send. This involves walking the commit graph:
+
+### Commit graph traversal
+
+The algorithm in `apps/web/src/git/service.ts:214-295` uses breadth-first search:
+
+```typescript
+async collectObjectsForPack(
+  wants: string[],
+  haves: string[]
+): Promise<string[]> {
+  const objectsToSend = new Set<string>();
+  const visited = new Set<string>();
+  const haveSet = new Set(haves);
+  const queue: string[] = [...wants];
+
+  while (queue.length > 0) {
+    const oid = queue.shift();
+    if (!oid || visited.has(oid)) continue;
+    
+    visited.add(oid);
+    
+    // Skip objects client already has
+    if (haveSet.has(oid)) continue;
+    
+    objectsToSend.add(oid);
+
+    const { type } = await git.readObject({ oid });
+
+    if (type === "commit") {
+      const commit = await git.readCommit({ oid });
+      queue.push(commit.commit.tree);  // Add tree
+      queue.push(...commit.commit.parent);  // Add parents
+    } else if (type === "tree") {
+      const tree = await git.readTree({ oid });
+      for (const entry of tree.tree) {
+        queue.push(entry.oid);  // Add all entries
+      }
+    } else if (type === "tag") {
+      const tag = await git.readTag({ oid });
+      queue.push(tag.tag.object);  // Add tagged object
+    }
+  }
+
+  return Array.from(objectsToSend);
+}
+```
+
+This traversal:
+1. Starts from commits the client wants
+2. Recursively visits all reachable objects (commits → trees → blobs)
+3. Stops at commits the client already has
+4. Returns only objects client doesn't have
+
+### Packfile generation
+
+Once objects are collected, they're packed into a binary format:
+
+```typescript
+async packObjects(oids: string[]) {
+  const result = await git.packObjects({
+    fs: this.fs,
+    dir: this.gitdir,
+    gitdir: this.gitdir,
+    oids,
+    write: false,  // Generate in-memory, don't write to disk
+    cache: this.cache,
+  });
+
+  return result.packfile;
+}
+```
+
+The packfile format:
+- Header: `PACK` signature + version + object count
+- Objects: Each object is compressed and delta-encoded
+- Checksum: SHA-1 hash of entire packfile
+
+<Info>
+Packfiles use delta compression to minimize transfer size. Instead of sending full objects, Git sends differences (deltas) between similar objects.
+</Info>
+
+## Reference updates
+
+When you push, Git sends commands to update references (branches and tags):
+
+```
+<old-oid> <new-oid> <ref-name>
+```
+
+The server validates and applies these updates in `apps/web/src/git/service.ts:598-738`:
+
+```typescript
+async applyRefUpdates(
+  commands: Array<{ oldOid: string; newOid: string; ref: string }>,
+  atomic: boolean
+): Promise<RefUpdateResult[]> {
+  const results: RefUpdateResult[] = [];
+  const ZERO_OID = "0".repeat(40);
+
+  // Validate all commands first
+  for (const cmd of commands) {
+    const isDelete = cmd.newOid === ZERO_OID;
+    const isCreate = cmd.oldOid === ZERO_OID;
+
+    const currentOid = await git.resolveRef({ ref: cmd.ref });
+
+    if (isDelete) {
+      // Validate ref exists before delete
+      results.push(
+        currentOid 
+          ? { ref: cmd.ref, ok: true }
+          : { ref: cmd.ref, ok: false, error: "ref doesn't exist" }
+      );
+    } else if (isCreate) {
+      // Validate ref doesn't exist before create
+      results.push(
+        currentOid
+          ? { ref: cmd.ref, ok: false, error: "ref already exists" }
+          : { ref: cmd.ref, ok: true }
+      );
+    } else {
+      // Validate fast-forward for updates
+      const isFF = await git.isDescendent({
+        oid: cmd.newOid,
+        ancestor: currentOid,
+      });
+      
+      results.push(
+        isFF
+          ? { ref: cmd.ref, ok: true }
+          : { ref: cmd.ref, ok: false, error: "non-fast-forward" }
+      );
+    }
+  }
+
+  // If atomic and any failed, fail all
+  if (atomic && results.some((r) => !r.ok)) {
+    return results.map((r) => ({ ...r, ok: false }));
+  }
+
+  // Apply successful updates
+  for (const [i, cmd] of commands.entries()) {
+    if (!results[i].ok) continue;
+    
+    if (cmd.newOid === ZERO_OID) {
+      await git.deleteRef({ ref: cmd.ref });
+    } else {
+      await git.writeRef({ ref: cmd.ref, value: cmd.newOid });
+    }
+  }
+
+  return results;
+}
+```
+
+Key validations:
+- **Old OID matches**: Prevents concurrent push conflicts
+- **Fast-forward only**: Rejects non-fast-forward updates (force push requires special permission)
+- **Atomic transactions**: If atomic capability is used, all updates succeed or all fail
+
+## Isomorphic-git integration
+
+Gitflare uses [isomorphic-git](https://isomorphic-git.org/), a pure JavaScript implementation of Git that works in any JavaScript environment:
+
+```typescript
+import * as git from "isomorphic-git";
+
+class GitService {
+  async initRepo() {
+    await git.init({
+      fs: this.fs,
+      dir: this.gitdir,
+      bare: true,
+      defaultBranch: "main",
+    });
+  }
+
+  async listBranches() {
+    return await git.listBranches({
+      fs: this.fs,
+      gitdir: this.gitdir,
+    });
+  }
+}
+```
+
+Isomorphic-git provides all core Git operations (commit, branch, merge, etc.) without native dependencies, making it perfect for serverless environments.
+
+<Note>
+The file system interface is abstracted, allowing isomorphic-git to work with different storage backends. Gitflare provides a DOFS (Durable Object File System) adapter.
+</Note>
+
+## Advantages of serverless Git
+
+**No infrastructure management**: You don't provision servers, configure Git daemons, or manage SSH keys. Everything runs on Cloudflare's edge platform.
+
+**Automatic scaling**: Each repository gets dedicated resources through its Durable Object. Add 1 repository or 1 million—the architecture handles it.
+
+**Global distribution**: Git operations execute at the nearest edge location, reducing latency for distributed teams.
+
+**Cost efficiency**: Pay only for actual usage (requests and storage) rather than provisioned capacity.
+
+**Built-in DDoS protection**: Cloudflare's network protects against attacks without additional configuration.
+
+## Limitations and trade-offs
+
+While serverless Git offers many advantages, there are some considerations:
+
+**Large repositories**: Repositories with extremely large files (GB+) may hit Durable Object storage limits.
+
+**Complex operations**: Some advanced Git operations (like server-side merge conflict resolution) are more complex in a serverless context.
+
+**Cold starts**: Though minimal with Durable Objects, there is a slight delay when accessing a repository for the first time after inactivity.
+
+**CPU limits**: Very large packfile generation might approach execution time limits on Workers.
+
+<Info>
+For most use cases (repositories under 5GB with typical file sizes), serverless Git performs excellently and scales effortlessly.
+</Info>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture overview" href="/concepts/architecture" icon="diagram-project">
+    Understand the complete system design
+  </Card>
+  <Card title="Durable Objects" href="/concepts/durable-objects" icon="database">
+    Learn how repository storage works
+  </Card>
+</CardGroup>

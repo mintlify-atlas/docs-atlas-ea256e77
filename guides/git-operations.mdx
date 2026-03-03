@@ -1,0 +1,293 @@
+---
+title: Git operations
+description: Learn how to perform git operations like clone, push, and pull with Gitflare
+---
+
+Gitflare supports standard Git operations over HTTPS. You can clone, push, and pull from your repositories using the Git command-line interface or any Git client.
+
+## Prerequisites
+
+Before performing git operations, you'll need:
+
+1. Git installed on your machine
+2. A Personal Access Token (PAT) for authentication
+
+<Note>
+  Personal Access Tokens are required for all push operations and for cloning/pulling private repositories.
+</Note>
+
+## Setting up authentication
+
+<Steps>
+  <Step title="Create a Personal Access Token">
+    Navigate to **Settings > Personal Access Tokens** and click **Generate New Token**.
+    
+    1. Enter a descriptive name for your token (e.g., "My Development Token")
+    2. Click **Generate Token**
+    3. Copy the token immediately - you won't be able to see it again
+    
+    <Warning>
+      Save your Personal Access Token securely. It will only be displayed once.
+    </Warning>
+  </Step>
+
+  <Step title="Use the token for authentication">
+    When Git prompts for credentials:
+    
+    - **Username**: Your Gitflare username
+    - **Password**: Your Personal Access Token (not your account password)
+  </Step>
+</Steps>
+
+## Cloning a repository
+
+To clone a repository to your local machine:
+
+<Steps>
+  <Step title="Get the repository URL">
+    On the repository page, click the **Code** button to reveal the clone options. The HTTPS URL will be displayed in the format:
+    
+    ```
+    https://your-domain.com/username/repository.git
+    ```
+    
+    Click the copy icon to copy the URL to your clipboard.
+  </Step>
+
+  <Step title="Clone the repository">
+    Open your terminal and run:
+    
+    ```bash
+    git clone https://your-domain.com/username/repository.git
+    ```
+    
+    If the repository is private, you'll be prompted for your username and Personal Access Token.
+  </Step>
+
+  <Step title="Navigate to the repository">
+    ```bash
+    cd repository
+    ```
+  </Step>
+</Steps>
+
+### Cloning public vs private repositories
+
+**Public repositories** can be cloned without authentication:
+
+```bash
+git clone https://your-domain.com/username/public-repo.git
+```
+
+**Private repositories** require authentication:
+
+```bash
+git clone https://your-domain.com/username/private-repo.git
+# Username: your-username
+# Password: your-personal-access-token
+```
+
+<Tip>
+  To avoid entering credentials repeatedly, consider using Git credential helpers or SSH keys (if supported by your deployment).
+</Tip>
+
+## Pushing changes
+
+After making changes to your local repository, you can push them to Gitflare.
+
+<Steps>
+  <Step title="Stage your changes">
+    ```bash
+    git add .
+    ```
+    
+    Or stage specific files:
+    
+    ```bash
+    git add file1.js file2.js
+    ```
+  </Step>
+
+  <Step title="Commit your changes">
+    ```bash
+    git commit -m "Your commit message"
+    ```
+    
+    <Tip>
+      Write clear, descriptive commit messages that explain what changed and why.
+    </Tip>
+  </Step>
+
+  <Step title="Push to Gitflare">
+    ```bash
+    git push origin main
+    ```
+    
+    For the first push, use:
+    
+    ```bash
+    git push -u origin main
+    ```
+    
+    You'll be prompted for your username and Personal Access Token.
+  </Step>
+</Steps>
+
+### Authentication for push operations
+
+All push operations require authentication, regardless of repository visibility:
+
+```bash
+git push origin main
+# Username: your-username
+# Password: your-personal-access-token
+```
+
+<Note>
+  Personal Access Tokens function like passwords for Git over HTTP. Never share your token or commit it to a repository.
+</Note>
+
+## Pulling changes
+
+To fetch and merge changes from the remote repository:
+
+```bash
+git pull origin main
+```
+
+This is equivalent to:
+
+```bash
+git fetch origin
+git merge origin/main
+```
+
+### Pulling from private repositories
+
+Private repositories require authentication for pull operations:
+
+```bash
+git pull origin main
+# Username: your-username
+# Password: your-personal-access-token
+```
+
+## Working with branches
+
+### Viewing branches
+
+You can view available branches in the Gitflare UI using the branch selector dropdown on the repository page.
+
+### Creating and pushing a new branch
+
+```bash
+# Create a new branch
+git checkout -b feature/new-feature
+
+# Make changes and commit
+git add .
+git commit -m "Add new feature"
+
+# Push the new branch
+git push -u origin feature/new-feature
+```
+
+### Switching branches
+
+Use the branch selector in the Gitflare UI to view different branches, or locally:
+
+```bash
+git checkout main
+git checkout feature/new-feature
+```
+
+## Common workflows
+
+### Starting with an empty repository
+
+When you create a new repository in Gitflare:
+
+```bash
+echo "# My Project" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://your-domain.com/username/repo.git
+git push -u origin main
+```
+
+### Migrating an existing repository
+
+To move an existing repository to Gitflare:
+
+```bash
+# In your existing repository
+git remote add gitflare https://your-domain.com/username/repo.git
+git push -u gitflare main
+
+# Or replace the origin
+git remote set-url origin https://your-domain.com/username/repo.git
+git push -u origin main
+```
+
+### Daily development workflow
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Create a feature branch
+git checkout -b feature/my-feature
+
+# Make changes and commit
+git add .
+git commit -m "Implement my feature"
+
+# Push your branch
+git push -u origin feature/my-feature
+```
+
+## Viewing commits
+
+After pushing commits, you can view them in the Gitflare UI:
+
+1. Navigate to your repository
+2. Click on the **Commits** tab
+3. View commit history with messages, authors, and timestamps
+4. Click on any commit to see the detailed changes
+
+## Troubleshooting
+
+### Authentication failed
+
+If you see an authentication error:
+
+1. Verify you're using your Personal Access Token as the password (not your account password)
+2. Check that the token hasn't been deleted in Settings
+3. Ensure your username is correct
+
+### Permission denied
+
+For private repositories:
+
+1. Confirm you're the repository owner
+2. Verify you're using a valid Personal Access Token
+3. Check that the repository URL is correct
+
+### Repository not found
+
+1. Verify the repository URL is correct
+2. Check if the repository is private and you're authenticated
+3. Ensure the repository exists at the specified path
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Creating repositories" icon="folder-plus" href="/guides/creating-repositories">
+    Learn how to create and configure repositories
+  </Card>
+  <Card title="Managing issues" icon="circle-dot" href="/guides/managing-issues">
+    Track bugs and features with issues
+  </Card>
+</CardGroup>

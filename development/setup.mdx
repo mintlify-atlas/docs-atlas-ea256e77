@@ -1,0 +1,114 @@
+---
+title: Development environment setup
+description: Set up your local environment to develop Gitflare
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js**: v22 or higher
+- **pnpm**: v10.19.0 or higher (Gitflare uses pnpm workspaces)
+- **Cloudflare Account**: Required for deployment (free tier works)
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Gitflare repository to your local machine:
+
+    ```bash
+    git clone https://github.com/your-org/gitflare.git
+    cd gitflare
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all workspace dependencies using pnpm:
+
+    ```bash
+    pnpm install
+    ```
+
+    This will install dependencies for all packages in the monorepo.
+  </Step>
+
+  <Step title="Set up environment variables">
+    Navigate to the web app directory and copy the example environment file:
+
+    ```bash
+    cd apps/web
+    cp .env.example .env
+    ```
+
+    Edit the `.env` file and configure the required environment variables for Cloudflare D1, authentication, and other services.
+  </Step>
+
+  <Step title="Run database migrations">
+    Apply database migrations to set up your local D1 database:
+
+    ```bash
+    pnpm db:migrate:local
+    ```
+
+    For production deployments, use `pnpm db:migrate:remote` instead.
+  </Step>
+
+  <Step title="Generate Cloudflare types">
+    Generate TypeScript types for Cloudflare Workers:
+
+    ```bash
+    pnpm cf-typegen
+    ```
+  </Step>
+
+  <Step title="Start the development server">
+    From the repository root, start all development servers:
+
+    ```bash
+    pnpm dev
+    ```
+
+    Alternatively, to run only the web app:
+
+    ```bash
+    cd apps/web
+    pnpm dev
+    ```
+
+    The development server will start using Alchemy, which provides a local development environment for Cloudflare Workers.
+  </Step>
+</Steps>
+
+## Verify your setup
+
+Once the development server is running, you can:
+
+1. Open your browser to the local development URL (typically shown in the terminal)
+2. Test the web interface for repository management
+3. Try Git operations against your local instance
+
+## Database management
+
+Gitflare uses Drizzle ORM for database schema management:
+
+- **Generate migrations**: `pnpm db:generate` - Create new migration files from schema changes
+- **Local migrations**: `pnpm db:migrate:local` - Apply migrations to local D1 database
+- **Remote migrations**: `pnpm db:migrate:remote` - Apply migrations to production D1 database
+
+## Deployment
+
+To deploy the web app to Cloudflare Workers:
+
+```bash
+cd apps/web
+pnpm deploy
+```
+
+This will build and deploy your application to Cloudflare's edge network.
+
+## Next steps
+
+- Review the [project structure](/development/project-structure) to understand the codebase organization
+- Read the [contribution guidelines](/development/contributing) before making changes
+- Explore the Tech Stack to learn about the technologies used in Gitflare

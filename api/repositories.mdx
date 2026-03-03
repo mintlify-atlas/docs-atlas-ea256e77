@@ -1,0 +1,320 @@
+---
+title: Repositories
+description: Manage Git repositories including creation, retrieval, and updates
+---
+
+## Get repositories by owner
+
+Retrieve all repositories owned by a specific user or organization.
+
+```http
+GET /api/repos/by-owner
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repositories
+</ParamField>
+
+### Response
+
+Returns an array of repository objects.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the repository
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Repository name
+</ResponseField>
+
+<ResponseField name="owner" type="string">
+  Username of the repository owner
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  User ID of the repository owner
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Repository description
+</ResponseField>
+
+<ResponseField name="isPrivate" type="boolean">
+  Whether the repository is private
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/repos/by-owner?owner=johndoe"
+```
+
+### Example response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "my-project",
+    "owner": "johndoe",
+    "ownerId": "user_123",
+    "description": "My awesome project",
+    "isPrivate": false
+  },
+  {
+    "id": 2,
+    "name": "secret-project",
+    "owner": "johndoe",
+    "ownerId": "user_123",
+    "description": "Private repository",
+    "isPrivate": true
+  }
+]
+```
+
+---
+
+## Get repository by owner and name
+
+Retrieve a specific repository by its owner and name.
+
+```http
+GET /api/repos/by-owner-and-name
+```
+
+### Parameters
+
+<ParamField path="owner" type="string" required>
+  The username or organization name that owns the repository
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The repository name
+</ParamField>
+
+### Response
+
+Returns a single repository object.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the repository
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Repository name
+</ResponseField>
+
+<ResponseField name="owner" type="string">
+  Username of the repository owner
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  User ID of the repository owner
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Repository description
+</ResponseField>
+
+<ResponseField name="isPrivate" type="boolean">
+  Whether the repository is private
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X GET "https://api.gitflare.dev/api/repos/by-owner-and-name?owner=johndoe&name=my-project"
+```
+
+### Example response
+
+```json
+{
+  "id": 1,
+  "name": "my-project",
+  "owner": "johndoe",
+  "ownerId": "user_123",
+  "description": "My awesome project",
+  "isPrivate": false
+}
+```
+
+---
+
+## Create repository
+
+Create a new Git repository.
+
+```http
+POST /api/repos/create
+```
+
+### Authentication
+
+This endpoint requires authentication. You must be logged in to create a repository.
+
+### Parameters
+
+<ParamField body="name" type="string" required>
+  Repository name. Must be 1-100 characters, contain only letters, numbers, hyphens, and underscores, and cannot end with `.git`
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  Repository description. Maximum 500 characters
+</ParamField>
+
+<ParamField body="isPrivate" type="boolean" required>
+  Whether the repository should be private
+</ParamField>
+
+### Response
+
+Returns the created repository object.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the repository
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Repository name
+</ResponseField>
+
+<ResponseField name="owner" type="string">
+  Username of the repository owner
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  User ID of the repository owner
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Repository description
+</ResponseField>
+
+<ResponseField name="isPrivate" type="boolean">
+  Whether the repository is private
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X POST "https://api.gitflare.dev/api/repos/create" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "name": "my-new-project",
+    "description": "A new project for testing",
+    "isPrivate": false
+  }'
+```
+
+### Example response
+
+```json
+{
+  "id": 3,
+  "name": "my-new-project",
+  "owner": "johndoe",
+  "ownerId": "user_123",
+  "description": "A new project for testing",
+  "isPrivate": false
+}
+```
+
+### Validation errors
+
+- **Repository name is required**: Name cannot be empty
+- **Repository name must be less than 100 characters**: Name exceeds maximum length
+- **Repository name can only contain letters, numbers, hyphens, and underscores**: Invalid characters in name
+- **Repository name cannot end with .git**: Name ends with `.git` extension
+- **Description must be less than 500 characters**: Description exceeds maximum length
+
+---
+
+## Update repository
+
+Update an existing repository's settings.
+
+```http
+POST /api/repos/update
+```
+
+### Authentication
+
+This endpoint requires authentication. You must be the repository owner to update it.
+
+### Parameters
+
+<ParamField body="id" type="number" required>
+  The repository ID to update
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated repository description. Maximum 500 characters
+</ParamField>
+
+<ParamField body="isPrivate" type="boolean" required>
+  Whether the repository should be private
+</ParamField>
+
+### Response
+
+Returns the updated repository object.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the repository
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Repository name
+</ResponseField>
+
+<ResponseField name="owner" type="string">
+  Username of the repository owner
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  User ID of the repository owner
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Updated repository description
+</ResponseField>
+
+<ResponseField name="isPrivate" type="boolean">
+  Updated privacy status
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X POST "https://api.gitflare.dev/api/repos/update" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "id": 1,
+    "description": "Updated project description",
+    "isPrivate": true
+  }'
+```
+
+### Example response
+
+```json
+{
+  "id": 1,
+  "name": "my-project",
+  "owner": "johndoe",
+  "ownerId": "user_123",
+  "description": "Updated project description",
+  "isPrivate": true
+}
+```
+
+### Error responses
+
+- **Repository not found**: The specified repository ID does not exist
+- **You do not have permission to update this repository**: You are not the repository owner
+- **You must be logged in to update a repository**: Authentication required

@@ -1,0 +1,277 @@
+---
+title: Issues API
+description: Create, retrieve, and update issues in your repositories
+---
+
+## Get issues by repository
+
+Retrieve all issues for a specific repository.
+
+**GET** `/api/issues`
+
+**Authentication:** Not required
+
+### Parameters
+
+<ParamField query="owner" type="string" required>
+  The username of the repository owner
+</ParamField>
+
+<ParamField query="repo" type="string" required>
+  The name of the repository
+</ParamField>
+
+### Response
+
+Returns an array of issue objects.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the issue
+</ResponseField>
+
+<ResponseField name="repositoryId" type="number">
+  ID of the repository this issue belongs to
+</ResponseField>
+
+<ResponseField name="fullName" type="string">
+  Full repository name in the format `owner/repo`
+</ResponseField>
+
+<ResponseField name="number" type="number">
+  Issue number within the repository
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Issue title
+</ResponseField>
+
+<ResponseField name="body" type="string">
+  Issue description body
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Issue status, either `open` or `closed`
+</ResponseField>
+
+<ResponseField name="creatorId" type="string">
+  User ID of the issue creator
+</ResponseField>
+
+<ResponseField name="creatorUsername" type="string">
+  Username of the issue creator
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp">
+  Timestamp when the issue was created (milliseconds)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp">
+  Timestamp when the issue was last updated (milliseconds)
+</ResponseField>
+
+### Example request
+
+```bash
+curl https://your-gitflare-instance.com/api/issues?owner=johndoe&repo=myproject
+```
+
+### Example response
+
+```json
+[
+  {
+    "id": 1,
+    "repositoryId": 42,
+    "fullName": "johndoe/myproject",
+    "number": 1,
+    "title": "Add dark mode support",
+    "body": "It would be great to have a dark mode option for better readability at night.",
+    "status": "open",
+    "creatorId": "user_123",
+    "creatorUsername": "janedoe",
+    "createdAt": 1709481600000,
+    "updatedAt": 1709481600000
+  }
+]
+```
+
+## Get issue by number
+
+Retrieve a specific issue by its number within a repository.
+
+**GET** `/api/issues/:number`
+
+**Authentication:** Not required
+
+### Parameters
+
+<ParamField query="owner" type="string" required>
+  The username of the repository owner
+</ParamField>
+
+<ParamField query="repo" type="string" required>
+  The name of the repository
+</ParamField>
+
+<ParamField path="number" type="number" required>
+  The issue number
+</ParamField>
+
+### Response
+
+Returns a single issue object with the same fields as the list endpoint.
+
+### Example request
+
+```bash
+curl https://your-gitflare-instance.com/api/issues/1?owner=johndoe&repo=myproject
+```
+
+### Example response
+
+```json
+{
+  "id": 1,
+  "repositoryId": 42,
+  "fullName": "johndoe/myproject",
+  "number": 1,
+  "title": "Add dark mode support",
+  "body": "It would be great to have a dark mode option for better readability at night.",
+  "status": "open",
+  "creatorId": "user_123",
+  "creatorUsername": "janedoe",
+  "createdAt": 1709481600000,
+  "updatedAt": 1709481600000
+}
+```
+
+### Error responses
+
+- **404 Not Found**: Issue not found for the specified owner, repository, and number
+- **400 Bad Request**: Invalid owner, repository name, or issue number provided
+
+## Create issue
+
+Create a new issue in a repository.
+
+**POST** `/api/issues`
+
+**Authentication:** Required
+
+### Parameters
+
+<ParamField body="owner" type="string" required>
+  The username of the repository owner
+</ParamField>
+
+<ParamField body="repo" type="string" required>
+  The name of the repository
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  The title of the issue
+</ParamField>
+
+<ParamField body="body" type="string" required>
+  The description body of the issue
+</ParamField>
+
+### Response
+
+Returns the created issue object.
+
+### Example request
+
+```bash
+curl -X POST https://your-gitflare-instance.com/api/issues \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "owner": "johndoe",
+    "repo": "myproject",
+    "title": "Add dark mode support",
+    "body": "It would be great to have a dark mode option for better readability at night."
+  }'
+```
+
+### Example response
+
+```json
+{
+  "id": 1,
+  "repositoryId": 42,
+  "fullName": "johndoe/myproject",
+  "number": 1,
+  "title": "Add dark mode support",
+  "body": "It would be great to have a dark mode option for better readability at night.",
+  "status": "open",
+  "creatorId": "user_123",
+  "creatorUsername": "janedoe",
+  "createdAt": 1709481600000,
+  "updatedAt": 1709481600000
+}
+```
+
+### Error responses
+
+- **401 Unauthorized**: You must be logged in to create an issue
+- **404 Not Found**: Repository not found
+- **400 Bad Request**: Invalid owner or repository name provided
+
+## Update issue status
+
+Update the status of an issue (open or closed). Only the issue creator can update the status.
+
+**POST** `/api/issues/status`
+
+**Authentication:** Required
+
+### Parameters
+
+<ParamField body="issueId" type="number" required>
+  The ID of the issue to update
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  The new status for the issue. Must be either `open` or `closed`
+</ParamField>
+
+### Response
+
+Returns the updated issue object.
+
+### Example request
+
+```bash
+curl -X POST https://your-gitflare-instance.com/api/issues/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "issueId": 1,
+    "status": "closed"
+  }'
+```
+
+### Example response
+
+```json
+{
+  "id": 1,
+  "repositoryId": 42,
+  "fullName": "johndoe/myproject",
+  "number": 1,
+  "title": "Add dark mode support",
+  "body": "It would be great to have a dark mode option for better readability at night.",
+  "status": "closed",
+  "creatorId": "user_123",
+  "creatorUsername": "janedoe",
+  "createdAt": 1709481600000,
+  "updatedAt": 1709568000000
+}
+```
+
+### Error responses
+
+- **401 Unauthorized**: You must be logged in or you don't have permission to update this issue
+- **404 Not Found**: Issue not found
+- **400 Bad Request**: Invalid issue ID or status value provided

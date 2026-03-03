@@ -1,0 +1,291 @@
+---
+title: Managing issues
+description: Learn how to create and manage issues to track bugs, features, and tasks
+---
+
+Issues in Gitflare help you track bugs, feature requests, and other tasks related to your repository. Each issue has a unique number and can be opened or closed.
+
+## Creating an issue
+
+<Steps>
+  <Step title="Navigate to the issues page">
+    Go to your repository and click on the **Issues** tab in the navigation menu.
+  </Step>
+
+  <Step title="Start a new issue">
+    Click the **New Issue** button in the top-right corner of the issues page.
+  </Step>
+
+  <Step title="Add issue details">
+    Fill in the issue information:
+    
+    - **Title**: Enter a clear, descriptive title (required, max 200 characters)
+    - **Description** (optional): Add a detailed description of the issue (max 10,000 characters)
+    
+    <Tip>
+      Use markdown formatting in the description to add code blocks, lists, and other formatting.
+    </Tip>
+  </Step>
+
+  <Step title="Create the issue">
+    Click the **Create** button to submit the issue. You'll be redirected to the issues list where your new issue appears.
+  </Step>
+</Steps>
+
+## Viewing issues
+
+### Issues list
+
+The issues page displays all issues for a repository:
+
+- Issue title and number (e.g., `#1`, `#2`)
+- Creator username
+- Creation time (displayed as relative time, e.g., "2 hours ago")
+- Issue status (open/closed)
+
+<Note>
+  Issues are numbered sequentially starting from 1. Each repository has its own issue counter.
+</Note>
+
+### Empty state
+
+If a repository has no issues yet, you'll see:
+
+- A message indicating no issues exist
+- A **Create Issue** button to get started
+
+## Issue details
+
+Click on any issue to view its full details:
+
+- Complete issue title
+- Full description with markdown rendering
+- Issue metadata:
+  - Issue number
+  - Creator information
+  - Creation timestamp
+  - Current status
+
+## Writing good issues
+
+### Bug reports
+
+When reporting a bug, include:
+
+1. **Clear title**: Summarize the problem in one line
+   ```
+   Example: "Login button not responding on mobile devices"
+   ```
+
+2. **Steps to reproduce**:
+   ```markdown
+   1. Navigate to /login
+   2. Click the login button on mobile
+   3. Button does not respond
+   ```
+
+3. **Expected behavior**: What should happen
+4. **Actual behavior**: What actually happens
+5. **Environment details**: Browser, OS, etc.
+
+### Feature requests
+
+When requesting a feature:
+
+1. **Descriptive title**: Clearly state the feature
+   ```
+   Example: "Add support for pull request templates"
+   ```
+
+2. **Use case**: Explain why this feature is needed
+3. **Proposed solution**: Describe how it should work
+4. **Alternatives considered**: Other approaches you've thought about
+
+### Task tracking
+
+For general tasks:
+
+1. **Action-oriented title**: Start with a verb
+   ```
+   Example: "Update documentation for API endpoints"
+   ```
+
+2. **Task checklist**: Break down into subtasks
+   ```markdown
+   - [ ] Update authentication docs
+   - [ ] Add examples for each endpoint
+   - [ ] Review and publish
+   ```
+
+## Issue status management
+
+### Opening and closing issues
+
+Issue creators can update the status of their issues:
+
+- **Open**: The issue is active and needs attention
+- **Closed**: The issue has been resolved or is no longer relevant
+
+<Note>
+  Currently, only the issue creator can change the issue status. This helps maintain clear ownership of issues.
+</Note>
+
+### When to close an issue
+
+Close an issue when:
+
+- The bug has been fixed
+- The feature has been implemented
+- The issue is a duplicate of another issue
+- The issue is no longer relevant
+- The issue was created by mistake
+
+<Tip>
+  Add a comment explaining why you're closing an issue to provide context for other users.
+</Tip>
+
+## Using markdown in issues
+
+Issue descriptions support markdown formatting:
+
+### Code blocks
+
+````markdown
+```javascript
+function hello() {
+  console.log("Hello, world!");
+}
+```
+````
+
+### Lists
+
+```markdown
+- Bullet point 1
+- Bullet point 2
+  - Nested point
+
+1. Numbered item
+2. Another item
+```
+
+### Links
+
+```markdown
+[Link text](https://example.com)
+```
+
+### Emphasis
+
+```markdown
+**bold text**
+*italic text*
+`inline code`
+```
+
+### Task lists
+
+```markdown
+- [ ] Incomplete task
+- [x] Completed task
+```
+
+## Issue permissions
+
+### Who can create issues
+
+Currently, you need to be authenticated to create issues in any repository.
+
+### Who can view issues
+
+Issue visibility follows repository visibility:
+
+- **Public repositories**: Anyone can view issues
+- **Private repositories**: Only the repository owner can view issues
+
+### Who can manage issues
+
+Only the issue creator can:
+
+- Update the issue status (open/closed)
+- Edit issue details
+
+<Note>
+  Repository owners have full control over all issues in their repositories.
+</Note>
+
+## Issue workflow example
+
+Here's a typical workflow for managing issues:
+
+<Steps>
+  <Step title="Create the issue">
+    When you discover a bug or want to track a feature:
+    
+    1. Go to Issues > New Issue
+    2. Add a descriptive title
+    3. Write a detailed description
+    4. Click Create
+  </Step>
+
+  <Step title="Discussion and work">
+    While the issue is open:
+    
+    - Reference the issue in commits (e.g., "Fix login bug (#1)")
+    - Add comments with updates
+    - Track progress on the work
+  </Step>
+
+  <Step title="Close when resolved">
+    Once the issue is addressed:
+    
+    1. Open the issue
+    2. Update the status to Closed
+    3. Optionally add a comment explaining the resolution
+  </Step>
+</Steps>
+
+## Best practices
+
+### Keep titles concise
+
+<CardGroup cols={2}>
+  <Card title="Good" icon="check">
+    "Login form validation fails on empty email"
+  </Card>
+  <Card title="Avoid" icon="x">
+    "I tried to login but the form doesn't work when I don't enter an email address and it should show an error"
+  </Card>
+</CardGroup>
+
+### One issue per problem
+
+Create separate issues for different problems, even if they're related. This makes tracking and resolution easier.
+
+### Search before creating
+
+Check existing issues to avoid duplicates. If you find a similar issue, add your information there instead of creating a new one.
+
+### Provide context
+
+The more context you provide, the easier it is to understand and address the issue:
+
+- Screenshots or error messages
+- Steps to reproduce
+- Expected vs actual behavior
+- Environment details
+
+### Keep issues focused
+
+Stay on topic within an issue. If the discussion reveals a new problem, create a separate issue for it.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Creating repositories" icon="folder-plus" href="/guides/creating-repositories">
+    Set up new repositories for your projects
+  </Card>
+  <Card title="Git operations" icon="code-branch" href="/guides/git-operations">
+    Learn how to push and pull code
+  </Card>
+</CardGroup>

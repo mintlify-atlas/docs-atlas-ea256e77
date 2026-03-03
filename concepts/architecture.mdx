@@ -1,0 +1,209 @@
+---
+title: System architecture
+description: Understanding Gitflare's serverless architecture built on Cloudflare's edge platform
+---
+
+Gitflare reimagines Git hosting with a fully serverless architecture that eliminates the need for traditional VMs or containers. Instead, it leverages Cloudflare's edge platform to provide a globally distributed, scalable Git hosting solution.
+
+## Architecture overview
+
+The system consists of three primary layers that work together to handle Git operations:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Git Client (You)                           │
+│                     git push / git pull / git clone                 │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │ HTTPS
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Cloudflare Workers (Edge)                      │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │              TanStack Start Application                       │  │
+│  │                                                               │  │
+│  │  • Authentication & Authorization                             │  │
+│  │  • HTTP Handlers for Git Smart Protocol                       │  │
+│  │    - git-upload-pack (fetch/pull)                             │  │
+│  │    - git-receive-pack (push)                                  │  │
+│  │    - Pkt-line protocol parsing                                │  │
+│  │    - Packfile creation & transfer                             │  │
+│  │  • Web UI                                                     │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└──────────────────┬────────────────────────────┬─────────────────────┘
+                   │                            │
+                   │ Git Operations             │ Metadata Queries
+                   ▼                            ▼
+┌──────────────────────────────────┐  ┌─────────────────────────────┐
+│   Cloudflare Durable Objects     │  │       Cloudflare D1         │
+│                                  │  │                             │
+│  ┌────────────────────────────┐  │  │  • User Accounts            │
+│  │  Virtualized File System   │  │  │  • Repository Metadata      │
+│  │    (Built on DO SQLite)    │  │  │  • Issues & Comments        │
+│  │                            │  │  │  • Real-time Subscriptions  │
+│  │  • Git Objects Storage     │  │  └─────────────────────────────┘
+│  │  • Packfile Operations     │  │
+│  └────────────────────────────┘  │
+│                                  │
+│  (One Durable Object per Repo)   │
+└──────────────────────────────────┘
+```
+
+## Component breakdown
+
+### Edge layer: Cloudflare Workers
+
+Your TanStack Start application runs on Cloudflare Workers, deployed globally at the edge for minimal latency. This layer handles:
+
+**Git Protocol Translation**: When you run standard Git commands like `git push` or `git clone`, the requests hit HTTP handlers that implement the Git Smart HTTP protocol. These handlers translate Git's wire protocol into operations that can be executed against repository storage.
+
+Relevant code in `apps/web/src/git/protocol.ts:5-82`:
+
+```typescript
+export async function advertiseCapabilities(
+  service: "git-upload-pack" | "git-receive-pack",
+  fullRepoName: string
+) {
+  if (service === "git-upload-pack") {
+    const lines = [
+      PktLine.encode("version 2\n"),
+      PktLine.encode("agent=gitflare/0.0.1\n"),
+      PktLine.encode("ls-refs\n"),
+      PktLine.encode("fetch\n"),
+      PktLine.encode("side-band-64k\n"),
+      PktLine.encode("object-format=sha1\n"),
+      PktLine.encodeFlush(),
+    ];
+    // ...
+  }
+}
+```
+
+**Authentication & Authorization**: The edge layer validates user credentials and permissions before routing requests to the appropriate Durable Object or D1 database.
+
+**Web Interface**: All UI interactions are served from the edge, providing fast page loads regardless of user location.
+
+<Note>
+The entire TanStack Start application runs on Cloudflare Workers with zero cold starts and automatic global distribution.
+</Note>
+
+### Storage layer: Durable Objects
+
+Each Git repository gets its own isolated Durable Object instance that maintains repository state and handles Git operations. This design provides:
+
+- **Strong consistency**: All operations for a single repository are serialized through one Durable Object
+- **Stateful operations**: The Durable Object maintains an in-memory cache and SQLite-backed storage
+- **Isolation**: Each repository is completely independent with dedicated resources
+
+The Durable Object implementation in `apps/web/src/do/repo.ts:39-62` shows the initialization:
+
+```typescript
+class RepoBase extends DurableObject<Env> {
+  private readonly dofs: Fs;
+  private readonly isoGitFs: ReturnType<IsoGitFs["getPromiseFsClient"]>;
+  private readonly git: GitService;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+
+    this.dofs = new Fs(ctx, env, { chunkSize: 512 * 1024 }); // 512KB chunks
+    this.isoGitFs = new IsoGitFs(this.dofs).getPromiseFsClient();
+    this.git = new GitService(this.isoGitFs, "/repo");
+
+    this.ctx.blockConcurrencyWhile(async () => {
+      this.dofs.setDeviceSize(5 * 1024 * 1024 * 1024); // 5GB device size
+      await this.ensureRepoInitialized();
+    });
+  }
+}
+```
+
+### Metadata layer: Cloudflare D1
+
+Cloudflare D1 (SQLite) stores metadata that needs to be queried efficiently across repositories:
+
+- User accounts and authentication data
+- Repository metadata (name, description, visibility)
+- Issues, pull requests, and comments
+- Access control lists and permissions
+
+This separation allows the web interface to provide fast queries and real-time updates without impacting Git protocol performance.
+
+## Request flow
+
+### Git push operation
+
+1. **Client authentication**: Git client sends credentials via HTTP Basic Auth
+2. **Protocol negotiation**: Worker advertises `git-receive-pack` capabilities
+3. **Command parsing**: Worker parses ref update commands and packfile data from client
+4. **Durable Object routing**: Worker routes request to the repository's Durable Object
+5. **Packfile indexing**: Durable Object indexes the packfile and extracts Git objects (see `apps/web/src/do/repo.ts:128-154`)
+6. **Ref updates**: Durable Object validates and applies branch/tag updates
+7. **Status report**: Success/failure status is returned to the client
+
+### Git clone/pull operation
+
+1. **Client request**: Git client requests specific commits via `git-upload-pack`
+2. **Ref listing**: Durable Object returns available branches and tags
+3. **Negotiation**: Client and server negotiate common commits to minimize data transfer
+4. **Object collection**: Durable Object walks the commit graph to find required objects (see `apps/web/src/git/service.ts:214-295`)
+5. **Packfile generation**: Objects are packed into an efficient binary format
+6. **Transfer**: Packfile is streamed to the client with progress updates
+
+### Web UI operation
+
+1. **User request**: Browser requests repository page
+2. **Metadata query**: Worker queries D1 for repository information
+3. **Content fetch**: Worker calls Durable Object methods for Git data (commits, trees, blobs)
+4. **Caching**: Results are cached in the Durable Object for subsequent requests (see `apps/web/src/do/repo.ts:232-242`)
+5. **Render**: Page is rendered and served from the edge
+
+## Scalability characteristics
+
+**Horizontal scaling**: Each repository is isolated in its own Durable Object, allowing unlimited repositories without resource contention.
+
+**Global distribution**: Workers run in 300+ cities worldwide, providing low-latency access regardless of user location.
+
+**Zero infrastructure management**: No servers to provision, patch, or scale. Cloudflare handles all infrastructure concerns.
+
+**Automatic failover**: Durable Objects are automatically migrated if a machine fails, with minimal disruption.
+
+<Info>
+The architecture can theoretically support unlimited repositories, with each repository capable of handling concurrent operations through its dedicated Durable Object.
+</Info>
+
+## Performance optimization
+
+Gitflare employs several strategies to maintain high performance:
+
+**Object caching**: Frequently accessed Git objects are cached in memory within the Durable Object (see `apps/web/src/git/service.ts:17`).
+
+**Chunked storage**: Large files are split into 512KB chunks for efficient storage and retrieval in SQLite.
+
+**Lazy loading**: The web interface loads commit history and file contents on-demand rather than preloading entire repositories.
+
+**Edge caching**: Static assets and public repository data can be cached at the edge using Cloudflare's cache API.
+
+## Security model
+
+Authentication is handled by Better Auth integrated with Cloudflare D1, providing:
+
+- Session management
+- OAuth integration
+- Two-factor authentication support
+- API token generation
+
+Authorization checks occur at the edge layer before routing to Durable Objects, ensuring users can only access repositories they have permissions for.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Serverless Git" href="/concepts/serverless-git" icon="git">
+    Learn how Git operations work without traditional servers
+  </Card>
+  <Card title="Durable Objects" href="/concepts/durable-objects" icon="database">
+    Understand how repository storage works
+  </Card>
+  <Card title="Storage architecture" href="/concepts/storage" icon="hard-drive">
+    Deep dive into the virtualized file system
+  </Card>
+</CardGroup>

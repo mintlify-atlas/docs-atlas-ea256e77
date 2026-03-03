@@ -1,0 +1,398 @@
+---
+title: git-upload-pack endpoint
+description: Fetch and pull operations using the Git Smart HTTP Protocol
+---
+
+The git-upload-pack endpoint handles fetch and pull operations, allowing Git clients to retrieve objects and references from repositories. This endpoint implements Git Protocol Version 2.
+
+## Endpoint
+
+```
+POST /{owner}/{repo}/git-upload-pack
+```
+
+<ParamField path="owner" type="string" required>
+  Repository owner username or organization name
+</ParamField>
+
+<ParamField path="repo" type="string" required>
+  Repository name (with or without `.git` suffix)
+</ParamField>
+
+## Authentication
+
+This endpoint supports HTTP Basic Authentication. Public repositories allow anonymous read access, while private repositories require authentication.
+
+```http
+Authorization: Basic base64(username:password)
+```
+
+Unauthenticated requests to private repositories receive:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="Git"
+```
+
+## Request
+
+### Headers
+
+<ParamField header="Content-Type" type="string" default="application/x-git-upload-pack-request">
+  Content type for upload-pack requests
+</ParamField>
+
+<ParamField header="Authorization" type="string">
+  HTTP Basic Authentication credentials (required for private repos)
+</ParamField>
+
+### Body
+
+The request body contains pkt-line encoded commands. Two commands are supported:
+
+#### ls-refs command
+
+Lists references available in the repository.
+
+```
+command=ls-refs
+<delimiter>
+[peel]
+[symrefs]
+[ref-prefix <prefix>]
+```
+
+**Arguments:**
+
+<ParamField query="peel" type="boolean">
+  Include peeled references (annotated tags)
+</ParamField>
+
+<ParamField query="symrefs" type="boolean">
+  Include symbolic reference targets (e.g., HEAD)
+</ParamField>
+
+<ParamField query="ref-prefix" type="string">
+  Filter references by prefix (can be specified multiple times)
+</ParamField>
+
+#### fetch command
+
+Fetches objects from the repository.
+
+```
+command=fetch
+<delimiter>
+want <oid>
+[have <oid>]
+[done]
+[thin-pack]
+[no-progress]
+[include-tag]
+[ofs-delta]
+[sideband-all]
+[shallow <oid>]
+[deepen <depth>]
+[deepen-relative]
+[deepen-since <timestamp>]
+[deepen-not <ref>]
+[filter <filter-spec>]
+```
+
+**Arguments:**
+
+<ParamField query="want" type="string" required>
+  Object ID (SHA-1) the client wants to fetch. Can be specified multiple times.
+</ParamField>
+
+<ParamField query="have" type="string">
+  Object ID (SHA-1) the client already has. Can be specified multiple times.
+</ParamField>
+
+<ParamField query="done" type="boolean">
+  Client has sent all have lines and is ready to receive packfile
+</ParamField>
+
+<ParamField query="thin-pack" type="boolean">
+  Request thin pack format (delta references to objects not in pack)
+</ParamField>
+
+<ParamField query="no-progress" type="boolean">
+  Suppress progress messages in side-band channel 2
+</ParamField>
+
+<ParamField query="include-tag" type="boolean">
+  Include tags that reference wanted commits
+</ParamField>
+
+<ParamField query="ofs-delta" type="boolean">
+  Support offset deltas in packfile
+</ParamField>
+
+<ParamField query="sideband-all" type="boolean">
+  Multiplex all output through side-band
+</ParamField>
+
+<ParamField query="shallow" type="string">
+  Mark commit as shallow boundary. Can be specified multiple times.
+</ParamField>
+
+<ParamField query="deepen" type="number">
+  Deepen shallow clone by specified number of commits
+</ParamField>
+
+<ParamField query="deepen-relative" type="boolean">
+  Deepen relative to current shallow boundary
+</ParamField>
+
+<ParamField query="deepen-since" type="number">
+  Deepen to commits newer than timestamp
+</ParamField>
+
+<ParamField query="deepen-not" type="string">
+  Deepen until specified ref is not reachable
+</ParamField>
+
+<ParamField query="filter" type="string">
+  Partial clone filter specification (e.g., `blob:none`, `tree:0`)
+</ParamField>
+
+## Response
+
+### ls-refs response
+
+<ResponseField name="status" type="number">
+  HTTP status code (200 for success)
+</ResponseField>
+
+<ResponseField name="Content-Type" type="string">
+  `application/x-git-upload-pack-result`
+</ResponseField>
+
+<ResponseField name="body" type="binary">
+  Pkt-line encoded reference list
+</ResponseField>
+
+The response body contains pkt-line encoded references:
+
+```
+<oid> <ref-name> [symref-target:<target>]
+<oid> <ref-name>^{} (peeled)
+...
+0000 (flush)
+```
+
+### fetch response
+
+<ResponseField name="status" type="number">
+  HTTP status code (200 for success, 500 for pack errors)
+</ResponseField>
+
+<ResponseField name="Content-Type" type="string">
+  `application/x-git-upload-pack-result`
+</ResponseField>
+
+<ResponseField name="body" type="binary">
+  Pkt-line encoded response with optional packfile
+</ResponseField>
+
+The response structure depends on whether the client sent `done`:
+
+#### Without done (negotiation phase)
+
+```
+acknowledgments
+[NAK | ACK <oid> ...]
+ready
+<delimiter>
+```
+
+#### With done (packfile delivery)
+
+```
+packfile
+remote: Counting objects: <count>, done.
+remote: Compressing objects: 100% (<count>/<count>), done.
+<side-band multiplexed packfile data>
+remote: Total <count> (delta 0), reused <count> (delta 0)
+0000 (flush)
+```
+
+The packfile is multiplexed through side-band-64k:
+- **Channel 1**: Packfile data
+- **Channel 2**: Progress messages (unless `no-progress`)
+- **Channel 3**: Error messages
+
+## Examples
+
+### List all references
+
+```bash
+curl -X POST https://gitflare.example.com/johndoe/myrepo/git-upload-pack \
+  -H "Content-Type: application/x-git-upload-pack-request" \
+  --data-binary @- << EOF
+0014command=ls-refs
+00010009peel
+000csymrefs
+0000
+EOF
+```
+
+### Fetch specific commit
+
+```bash
+curl -X POST https://gitflare.example.com/johndoe/myrepo/git-upload-pack \
+  -u "username:password" \
+  -H "Content-Type: application/x-git-upload-pack-request" \
+  --data-binary @- << EOF
+0011command=fetch
+0001000ewant abc123...
+0009done
+000ethin-pack
+000dno-progress
+0000
+EOF
+```
+
+## Implementation details
+
+The upload-pack endpoint is implemented across several components:
+
+### Route handler
+
+`apps/web/src/routes/$owner/$repo/git-upload-pack.ts:5`
+
+Handles authentication and forwards requests to the Durable Object:
+
+```typescript
+export const Route = createFileRoute("/$owner/$repo/git-upload-pack")({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        // Verify authentication
+        const isAuthorized = await verifyAuth({
+          owner,
+          repo: repoName,
+          req: request,
+          service: "upload-pack",
+        });
+
+        // Forward to Durable Object
+        return stub.fetch("https://do/git-upload-pack", {
+          method: "POST",
+          body: request.body,
+        });
+      },
+    },
+  },
+});
+```
+
+### Durable Object handler
+
+`apps/web/src/do/repo.ts:100`
+
+Processes the request within the repository Durable Object:
+
+```typescript
+if (pathname === "/git-upload-pack" && request.method === "POST") {
+  const result = await this.uploadPack(data);
+  return result;
+}
+```
+
+### Protocol implementation
+
+`apps/web/src/do/repo.ts:157`
+
+Handles command parsing and execution:
+
+```typescript
+async uploadPack(data: Uint8Array) {
+  const { command, args } = parseCommand(data);
+
+  if (command === "ls-refs") {
+    const { refs, symbolicHead } = await this.git.listRefs();
+    return await buildLsRefsResponse(refs, args, symbolicHead, ...);
+  }
+
+  if (command === "fetch") {
+    const fetchRequest = parseFetchRequest(data, args);
+    const commonCommits = await this.git.findCommonCommits(
+      fetchRequest.haves
+    );
+
+    if (fetchRequest.done && fetchRequest.wants.length > 0) {
+      const objectsToPack = await this.git.collectObjectsForPack(
+        fetchRequest.wants,
+        fetchRequest.haves
+      );
+      packfileData = await this.git.packObjects(objectsToPack);
+    }
+
+    return await buildFetchResponse({
+      commonCommits,
+      packfileData,
+      noProgress: fetchRequest.capabilities.noProgress,
+      done: fetchRequest.done,
+    });
+  }
+}
+```
+
+### Core protocol functions
+
+The protocol implementation uses these key functions:
+
+- `parseCommand()`: Parse command and arguments from pkt-line data (`apps/web/src/git/protocol.ts:173`)
+- `parseFetchRequest()`: Extract fetch parameters (`apps/web/src/git/protocol.ts:243`)
+- `buildLsRefsResponse()`: Build reference list response (`apps/web/src/git/protocol.ts:322`)
+- `buildFetchResponse()`: Build packfile response with side-band (`apps/web/src/git/protocol.ts:434`)
+
+### Git operations
+
+`apps/web/src/git/service.ts`
+
+Provides Git operations using isomorphic-git:
+
+- `listRefs()`: List all references with OIDs (`service.ts:33`)
+- `findCommonCommits()`: Find commits client already has (`service.ts:324`)
+- `collectObjectsForPack()`: Walk object graph to collect objects (`service.ts:213`)
+- `packObjects()`: Create packfile from object list (`service.ts:297`)
+
+## Error responses
+
+### Unauthorized access
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="Git"
+
+Unauthorized
+```
+
+### Pack operation failure
+
+```http
+HTTP/1.1 500 Internal Server Error
+
+ERR pack-objects failed: <error message>
+```
+
+### Unsupported command
+
+```http
+HTTP/1.1 400 Bad Request
+
+Unsupported command
+```
+
+## Related endpoints
+
+<Card title="Git Protocol Overview" icon="book" href="/api/git-protocol">
+  Learn about the Git Smart HTTP Protocol implementation
+</Card>
+
+<Card title="git-receive-pack" icon="upload" href="/api/git-receive-pack">
+  Push operations endpoint
+</Card>

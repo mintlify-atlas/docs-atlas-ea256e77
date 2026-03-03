@@ -1,0 +1,341 @@
+---
+title: Access control
+description: Learn how to manage repository access and permissions with Personal Access Tokens
+---
+
+Gitflare uses Personal Access Tokens (PATs) to authenticate Git operations over HTTPS. Understanding how access control works helps you secure your repositories while enabling the workflows you need.
+
+## Personal Access Tokens
+
+Personal Access Tokens function like passwords for Git over HTTP. They provide secure authentication for pushing and pulling repositories without using your account password.
+
+### Why use Personal Access Tokens
+
+- **Security**: Keep your account password separate from Git authentication
+- **Revocability**: Delete compromised tokens without changing your password
+- **Granular control**: Create different tokens for different purposes
+- **Tracking**: See when each token was last used
+
+<Warning>
+  Personal Access Tokens grant full access to your repositories. Treat them like passwords and never share them or commit them to repositories.
+</Warning>
+
+## Creating a Personal Access Token
+
+<Steps>
+  <Step title="Navigate to settings">
+    Click on your profile menu and select **Settings**, or go directly to `/settings`.
+  </Step>
+
+  <Step title="Open the tokens tab">
+    In Settings, click on the **Personal Access Tokens** tab.
+  </Step>
+
+  <Step title="Generate a new token">
+    Click the **Generate New Token** button.
+  </Step>
+
+  <Step title="Name your token">
+    Enter a descriptive name that helps you identify the token's purpose:
+    
+    - "Development Machine"
+    - "CI/CD Pipeline"
+    - "Production Deployment"
+    
+    Token names must be:
+    - Minimum 3 characters
+    - Maximum 50 characters
+  </Step>
+
+  <Step title="Generate and copy">
+    Click **Generate Token** to create your token. The token will be displayed once:
+    
+    <Warning>
+      Copy your Personal Access Token immediately. You won't be able to see it again! If you lose it, you'll need to create a new token.
+    </Warning>
+    
+    Click the copy icon to copy the token to your clipboard.
+  </Step>
+
+  <Step title="Store securely">
+    Save your token in a secure location:
+    
+    - Password manager (recommended)
+    - Encrypted file
+    - Secure environment variables
+    
+    Never store tokens in:
+    - Plain text files in your repositories
+    - Unencrypted notes
+    - Public documentation
+  </Step>
+</Steps>
+
+## Using Personal Access Tokens
+
+### Authenticating Git operations
+
+When Git prompts for credentials, use your token:
+
+```bash
+# Git will prompt for credentials
+git clone https://your-domain.com/username/repo.git
+
+# Enter your credentials:
+Username: your-username
+Password: gvx_your_personal_access_token_here
+```
+
+<Note>
+  The password field should contain your Personal Access Token, not your account password.
+</Note>
+
+### Token prefix
+
+All Gitflare Personal Access Tokens start with the prefix `gvx_`. This helps identify them and prevents accidental exposure:
+
+```
+gvx_abc123def456ghi789...
+```
+
+### When tokens are required
+
+Personal Access Tokens are required for:
+
+**Push operations** (all repositories):
+```bash
+git push origin main  # Always requires PAT
+```
+
+**Private repository operations**:
+```bash
+git clone https://your-domain.com/username/private-repo.git  # Requires PAT
+git pull origin main  # Requires PAT
+```
+
+**Public repository reads** (no authentication needed):
+```bash
+git clone https://your-domain.com/username/public-repo.git  # No PAT needed
+git pull origin main  # No PAT needed (if public)
+```
+
+## Managing your tokens
+
+### Viewing active tokens
+
+In **Settings > Personal Access Tokens**, you can see all your active tokens:
+
+- Token name
+- Token prefix (e.g., `gvx_abc...`)
+- Creation date
+- Last used date
+
+<Tip>
+  Check the "Last used" date to identify unused tokens that can be safely deleted.
+</Tip>
+
+### Deleting tokens
+
+To revoke a token:
+
+<Steps>
+  <Step title="Go to Personal Access Tokens">
+    Navigate to **Settings > Personal Access Tokens**.
+  </Step>
+
+  <Step title="Find the token">
+    Locate the token you want to delete in the "Your Tokens" section.
+  </Step>
+
+  <Step title="Delete the token">
+    Click the trash icon next to the token. The token will be immediately revoked.
+  </Step>
+</Steps>
+
+<Warning>
+  Deleting a token is immediate and cannot be undone. Any services using that token will lose access.
+</Warning>
+
+### When to delete tokens
+
+Delete tokens when:
+
+- You no longer need them
+- They may have been compromised
+- The device or service using them is no longer in use
+- You're rotating tokens for security
+- The token hasn't been used in a long time
+
+## Repository access model
+
+Gitflare's access control follows a simple ownership model:
+
+### Public repositories
+
+- **Read access**: Anyone (no authentication required)
+  - View repository files
+  - View commit history
+  - View issues
+  - Clone the repository
+  - Pull updates
+
+- **Write access**: Owner only (requires PAT)
+  - Push commits
+  - Create/manage issues (as creator)
+  - Modify repository settings
+
+### Private repositories
+
+- **All access**: Owner only (requires PAT)
+  - View repository files
+  - View commit history
+  - View issues
+  - Clone the repository
+  - Pull updates
+  - Push commits
+  - Create/manage issues
+  - Modify repository settings
+
+<Note>
+  Private repositories are only visible to their owner. Other users cannot see them in lists or access them via any URL.
+</Note>
+
+## Security best practices
+
+### Token management
+
+1. **Create purpose-specific tokens**
+   ```
+   ✓ "Laptop Development"
+   ✓ "CI/CD Pipeline"
+   ✓ "Server Deployment"
+   ```
+
+2. **Use descriptive names**
+   - Helps you identify tokens later
+   - Makes it easy to know which token to revoke
+
+3. **Rotate tokens regularly**
+   - Create new tokens periodically
+   - Delete old tokens
+   - Update services to use new tokens
+
+4. **Delete unused tokens**
+   - Check the "Last used" date
+   - Remove tokens for decommissioned services
+   - Clean up tokens from old devices
+
+### Using tokens safely
+
+<CardGroup cols={2}>
+  <Card title="Do" icon="check">
+    - Store in password managers
+    - Use environment variables
+    - Revoke compromised tokens immediately
+    - Create separate tokens per device
+    - Delete tokens you no longer need
+  </Card>
+  <Card title="Don't" icon="x">
+    - Commit tokens to repositories
+    - Share tokens with others
+    - Use the same token everywhere
+    - Store tokens in plain text
+    - Keep tokens after compromise
+  </Card>
+</CardGroup>
+
+### Responding to token exposure
+
+If you accidentally expose a token:
+
+<Steps>
+  <Step title="Revoke immediately">
+    Go to Settings > Personal Access Tokens and delete the compromised token.
+  </Step>
+
+  <Step title="Create a new token">
+    Generate a new token to replace the compromised one.
+  </Step>
+
+  <Step title="Update services">
+    Update any services or devices that were using the old token.
+  </Step>
+
+  <Step title="Review access logs">
+    Check the "Last used" date on the revoked token to see if it was used recently.
+  </Step>
+</Steps>
+
+## Using tokens in different environments
+
+### Local development
+
+Store tokens using Git credential helpers:
+
+```bash
+# Cache credentials for 1 hour
+git config --global credential.helper 'cache --timeout=3600'
+
+# Or store credentials permanently (less secure)
+git config --global credential.helper store
+```
+
+### CI/CD pipelines
+
+Store tokens as encrypted secrets:
+
+**GitHub Actions:**
+```yaml
+env:
+  GITFLARE_TOKEN: ${{ secrets.GITFLARE_TOKEN }}
+```
+
+**GitLab CI:**
+```yaml
+variables:
+  GITFLARE_TOKEN: $GITFLARE_TOKEN
+```
+
+**Embed in git URLs:**
+```bash
+git clone https://username:${GITFLARE_TOKEN}@your-domain.com/username/repo.git
+```
+
+### Server deployments
+
+Use environment variables:
+
+```bash
+# In your deployment script
+export GITFLARE_TOKEN="gvx_your_token_here"
+git clone https://username:${GITFLARE_TOKEN}@your-domain.com/username/repo.git
+```
+
+<Warning>
+  Never hardcode tokens in deployment scripts. Always use environment variables or secret management systems.
+</Warning>
+
+## Access control limitations
+
+Gitflare currently has the following access control characteristics:
+
+- **No team access**: Repositories can only be accessed by their owner
+- **No collaborators**: You cannot add other users to your repositories
+- **No fine-grained permissions**: Tokens have full access to all your repositories
+- **No read-only tokens**: All tokens can read and write
+- **No organization support**: Only individual user accounts are supported
+
+<Note>
+  These limitations reflect Gitflare's design as a lightweight, personal Git hosting solution. For team collaboration, consider using the platform alongside other collaboration tools.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Git operations" icon="code-branch" href="/guides/git-operations">
+    Learn how to use your tokens for git operations
+  </Card>
+  <Card title="Creating repositories" icon="folder-plus" href="/guides/creating-repositories">
+    Set up new repositories with proper visibility settings
+  </Card>
+</CardGroup>

@@ -1,0 +1,90 @@
+---
+title: Comments API
+description: Create and manage comments on issues and pull requests
+---
+
+## Create comment for issue
+
+Create a new comment on an existing issue.
+
+**POST** `/api/comments/issue`
+
+**Authentication:** Required
+
+### Parameters
+
+<ParamField body="issueId" type="number" required>
+  The ID of the issue to comment on
+</ParamField>
+
+<ParamField body="body" type="string" required>
+  The content of the comment
+</ParamField>
+
+### Response
+
+Returns the created comment object.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the comment
+</ResponseField>
+
+<ResponseField name="authorId" type="string">
+  User ID of the comment author
+</ResponseField>
+
+<ResponseField name="authorUsername" type="string">
+  Username of the comment author
+</ResponseField>
+
+<ResponseField name="body" type="string">
+  The content of the comment
+</ResponseField>
+
+<ResponseField name="issueId" type="number">
+  ID of the issue this comment belongs to (null if on pull request)
+</ResponseField>
+
+<ResponseField name="pullRequestId" type="number">
+  ID of the pull request this comment belongs to (null if on issue)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp">
+  Timestamp when the comment was created (milliseconds)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp">
+  Timestamp when the comment was last updated (milliseconds)
+</ResponseField>
+
+### Example request
+
+```bash
+curl -X POST https://your-gitflare-instance.com/api/comments/issue \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "issueId": 1,
+    "body": "I agree, dark mode would be a great addition to this project!"
+  }'
+```
+
+### Example response
+
+```json
+{
+  "id": 42,
+  "authorId": "user_456",
+  "authorUsername": "johnsmith",
+  "body": "I agree, dark mode would be a great addition to this project!",
+  "issueId": 1,
+  "pullRequestId": null,
+  "createdAt": 1709568000000,
+  "updatedAt": 1709568000000
+}
+```
+
+### Error responses
+
+- **401 Unauthorized**: You must be logged in to create a comment
+- **400 Bad Request**: Invalid issue ID or missing comment body

@@ -1,0 +1,163 @@
+---
+title: Git Smart HTTP Protocol
+description: Learn how Gitflare implements the Git Smart HTTP Protocol for repository operations
+---
+
+Gitflare implements the Git Smart HTTP Protocol to enable standard Git clients to interact with repositories hosted on the platform. This protocol supports both fetch (pull) and push operations using HTTP/HTTPS.
+
+## Protocol overview
+
+The Git Smart HTTP Protocol uses a stateless request-response model with two main endpoints:
+
+- **git-upload-pack**: Handles fetch and pull operations (read access)
+- **git-receive-pack**: Handles push operations (write access)
+
+Both endpoints follow a discovery phase where the client requests capability advertisements, followed by negotiation and data transfer phases.
+
+## Protocol version
+
+Gitflare uses:
+- **Protocol v2** for git-upload-pack (fetch/pull operations)
+- **Protocol v1** for git-receive-pack (push operations)
+
+<Note>
+The git-receive-pack endpoint currently uses protocol v1 but is planned to be upgraded to v2 in future releases.
+</Note>
+
+## Authentication
+
+All Git protocol endpoints support HTTP Basic Authentication:
+
+```http
+Authorization: Basic base64(username:password)
+```
+
+- **Read operations** (upload-pack): Allow anonymous access for public repositories
+- **Write operations** (receive-pack): Always require authentication
+
+Unauthenticated requests receive a `401 Unauthorized` response with a `WWW-Authenticate` header.
+
+## Capability discovery
+
+Clients discover server capabilities by making a GET request to the info/refs endpoint:
+
+```http
+GET /{owner}/{repo}/info/refs?service=git-upload-pack
+```
+
+The server responds with capability advertisements in pkt-line format.
+
+### Upload-pack capabilities (protocol v2)
+
+The server advertises these capabilities for fetch operations:
+
+- `version 2`: Protocol version
+- `agent=gitflare/0.0.1`: Server identification
+- `ls-refs`: List references command support
+- `fetch`: Fetch objects command support
+- `side-band-64k`: Multiplexed progress messages
+- `object-format=sha1`: SHA-1 object format
+
+### Receive-pack capabilities (protocol v1)
+
+The server advertises these capabilities for push operations:
+
+- `report-status`: Send detailed status report
+- `delete-refs`: Support for deleting references
+- `atomic`: All-or-nothing push transactions
+- `no-thin`: Do not use thin pack format
+- `agent=gitflare/0.0.1`: Server identification
+- `symref=HEAD:refs/heads/{branch}`: Symbolic HEAD reference
+
+## Pkt-line format
+
+All protocol messages use the pkt-line format defined in the Git wire protocol:
+
+```
+<4-byte hex length><payload>
+```
+
+Special packets:
+- `0000`: Flush packet (end of message)
+- `0001`: Delimiter packet (section separator)
+- `0002`: Response-end packet (end of response)
+
+See `apps/web/src/git/pkt.ts:46` for the implementation.
+
+## Request flow
+
+### Fetch operation (pull/clone)
+
+1. Client requests capability advertisement:
+   ```http
+   GET /{owner}/{repo}/info/refs?service=git-upload-pack
+   ```
+
+2. Client sends ls-refs command to list available references:
+   ```http
+   POST /{owner}/{repo}/git-upload-pack
+   Content-Type: application/x-git-upload-pack-request
+   
+   [pkt-line encoded ls-refs command]
+   ```
+
+3. Client sends fetch command with wants and haves:
+   ```http
+   POST /{owner}/{repo}/git-upload-pack
+   Content-Type: application/x-git-upload-pack-request
+   
+   [pkt-line encoded fetch command]
+   ```
+
+4. Server responds with packfile containing requested objects
+
+### Push operation
+
+1. Client requests capability advertisement:
+   ```http
+   GET /{owner}/{repo}/info/refs?service=git-receive-pack
+   ```
+
+2. Client sends reference updates and packfile:
+   ```http
+   POST /{owner}/{repo}/git-receive-pack
+   Content-Type: application/x-git-receive-pack-request
+   
+   [pkt-line encoded commands]
+   [packfile data]
+   ```
+
+3. Server responds with status report for each reference update
+
+## Implementation details
+
+The protocol implementation is distributed across several files:
+
+- `apps/web/src/git/protocol.ts`: Core protocol functions
+- `apps/web/src/git/pkt.ts`: Pkt-line encoding/decoding
+- `apps/web/src/git/service.ts`: Git operations using isomorphic-git
+- `apps/web/src/do/repo.ts`: Durable Object handling requests
+- `apps/web/src/routes/$owner/$repo/`: HTTP route handlers
+
+## Error handling
+
+Errors are communicated using:
+- HTTP status codes (401, 404, 500)
+- Pkt-line error packets starting with `ERR `
+- Side-band channel 3 for packfile errors
+
+## Related endpoints
+
+<Card title="git-upload-pack" icon="download" href="/api/git-upload-pack">
+  Fetch and pull operations endpoint
+</Card>
+
+<Card title="git-receive-pack" icon="upload" href="/api/git-receive-pack">
+  Push operations endpoint
+</Card>
+
+## References
+
+- [Git Protocol Version 2](https://git-scm.com/docs/protocol-v2)
+- [Git Pack Protocol](https://git-scm.com/docs/gitprotocol-pack)
+- [Git HTTP Protocol](https://git-scm.com/docs/http-protocol)
